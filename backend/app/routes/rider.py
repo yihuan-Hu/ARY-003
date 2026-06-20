@@ -1,7 +1,7 @@
 from flask import Blueprint, request, g
 
 from app.services.registration_service import RegistrationService
-from app.dao.race_project_dao import RaceProjectDAO
+from app.services.race_project_service import RaceProjectService
 from app.utils.auth import require_auth, require_role
 from app.utils.permissions import require_own_registration, require_own_race_project
 from app.utils.errors import ForbiddenError
@@ -10,7 +10,7 @@ from app.utils.response import success, created
 rider_bp = Blueprint("rider", __name__)
 
 reg_service = RegistrationService()
-race_project_dao = RaceProjectDAO()
+race_project_service = RaceProjectService()
 
 
 # =============================================
@@ -61,12 +61,10 @@ def withdraw_registration(registration_id):
 @require_role("contestant")
 @require_own_race_project()
 def get_my_race_project(race_project_id):
-    """Rider 查看自己的 RaceProject（装饰器已校验归属链）"""
-    rp = g.current_race_project
-    return success({
-        "id": rp["id"],
-        "registration_id": rp["registration_id"],
-        "aggregate_ingestion_status": rp["aggregate_ingestion_status"],
-        "connection_health": rp["connection_health"],
-        "created_at": rp["created_at"],
-    })
+    """Rider 查看自己的 RaceProject（装饰器已校验归属链，存入 g.current_race_project）
+
+    返回最小字段 + 未来扩展占位：
+    - ca_connections: []  → 未来 CAConnection 数组占位
+    - work: null          → 未来主 Work 链接占位
+    """
+    return success(race_project_service._format(g.current_race_project))

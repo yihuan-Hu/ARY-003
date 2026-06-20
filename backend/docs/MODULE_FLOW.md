@@ -1,8 +1,11 @@
 ﻿# Backend Module And Flow Guide
 
-本文说明 Organizer Backend 拆分后的模块职责、调用链路和关键接口流向。目标是让后续维护者不用翻完整代码，也能快速知道“东西放在哪里、请求怎么走、要改哪里”。
+本文说明 Organizer Backend 拆分后的模块职责、调用链路和关键接口流向。目标是让后续维护者不用翻完整代码，也能快速知道”东西放在哪里、请求怎么走、要改哪里”。
 
-## 1. 总体结构
+> **注意：本文描述的是旧 `routes/`/`daos`/`services/`/`utils/` 层（PoC / Jumbotron 后端）。**
+> **Checkpoint 1 新增的 ARY MVP 模块（Registration、RaceProject、权限策略）位于 `app/` 包中，见下方第 14 节。**
+
+## 1. 总体结构（旧 PoC 后端）
 
 ```text
 backend/
@@ -738,3 +741,93 @@ python -m scripts.seed_demo
 - Export 路由为了生成 CSV，直接调用 DAO，没有额外 ExportService。
 
 这些都是有意保持简单，方便 Demo 和目标模式快速迭代。
+
+## 14. 新 ARY MVP 模块（Checkpoint 1，`app/` 包）
+
+Checkpoint 1 新增了独立的 `app/` 包，与旧 `routes/`/`daos`/`services/` 并行存在：
+
+```text
+app/
+├── __init__.py              # Flask app factory（新 ARY MVP）
+├── config.py                # 配置（SECRET_KEY、DATABASE_PATH、JWT）
+├── database.py              # 数据库建表 + migration（含 registrations、race_projects）
+├── dao/                     # 数据访问层
+│   ├── race_dao.py          #  Race CRUD + created_by_user_id
+│   ├── user_dao.py          #  User CRUD + roles 集合（JSON）
+│   ├── registration_dao.py  #  Registration CRUD + 状态更新
+│   └── race_project_dao.py  #  RaceProject CRUD + 关联查询
+├── services/
+│   ├── registration_service.py      # 报名/审核/退赛 + 原子生成 RaceProject（角色 1+3）
+│   └── race_project_service.py      # RaceProject 查询 + 占位字段（角色 4）
+├── routes/
+│   ├── auth.py              # 登录 /me
+│   ├── rider.py             # Rider Registration + RaceProject 查询
+│   └── organizer.py         # Race 管理 + Registration 审核 + RaceProject 列表
+└── utils/
+    ├── auth.py              # JWT + hash/verify + 角色装饰器
+    ├── errors.py            # 统一异常（AppError → JSON）
+    ├── permissions.py       # own/managed_race 策略 + 装饰器（角色 2）
+    └── response.py          # success() / created() 响应 helper
+```
+
+### 14.1 新旧隔离
+
+| 层 | 旧（PoC/Jumbotron） | 新（ARY MVP Checkpoint 1） |
+|---|---------------------|---------------------------|
+| 入口 | `app.py` → `routes/` | `app/__init__.py` → `app/routes/` |
+| 数据库 | `database/schema.py`（旧 7 表） | `app/database.py`（旧表 + registrations + race_projects） |
+| 测试 | `tests/legacy/`（旧 `app.py` 入口） | `tests/test_checkpoint.py`（新 `app/` 入口） |
+| 职责 | Jumbotron / Entry / Submission / Agent Usage | Registration → RaceProject 参赛事实链 |
+
+### 14.2 Checkpoint 1 数据模型
+
+新增表（`app/database.py`）：
+
+```text
+registrations:
+  UNIQUE (race_id, user_id)           -- 一人一赛事一个报名
+  status: submitted|approved|rejected|withdrawn
+
+race_projects:
+  UNIQUE (registration_id)            -- 一个报名一个 RaceProject
+  aggregate_ingestion_status: not_configured
+  connection_health: no_signal
+```
+
+### 14.3 核心链路（Checkpoint 1 主链）
+
+```text
+Organizer 创建 Race
+  → Rider 提交 Registration (submitted)
+  → Organizer approve (原子事务)
+  → Registration approved + RaceProject 自动生成（幂等）
+  → Rider 查看自己的 RaceProject（含 ca_connections:[]、work:null 占位）
+  → Organizer 查看 managed race 的 RaceProject 列表
+```
+
+### 14.4 角色 4 交付速查
+
+| 交付物 | 位置 |
+|--------|------|
+| RaceProjectService | `app/services/race_project_service.py` |
+| Route 重构（含占位字段） | `app/routes/rider.py`（get_my_race_project）、`app/routes/organizer.py`（list_race_race_projects） |
+| Demo 脚本（17 步） | `../demo.py` |
+| 兼容性分析 | `RACEPROJECT_COMPATIBILITY.md` |
+| 全量回归测试 | `pytest tests/test_checkpoint.py tests/legacy/ -v`（52 passed） |
+
+### 14.5 RaceProject API 响应格式
+
+```json
+{
+  "id": 1,
+  "registration_id": 1,
+  "aggregate_ingestion_status": "not_configured",
+  "connection_health": "no_signal",
+  "created_at": "2026-06-20T...",
+  "ca_connections": [],
+  "work": null
+}
+```
+
+- `ca_connections` 和 `work` 为 Checkpoint 2 预留，当前不包含虚假业务数据。
+- RaceProject 只由 `RegistrationService.approve_registration()` 原子创建，Rider 不可手动创建。

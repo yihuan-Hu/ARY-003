@@ -1,8 +1,8 @@
 from flask import Blueprint, request, g
 
 from app.services.registration_service import RegistrationService
+from app.services.race_project_service import RaceProjectService
 from app.dao.race_dao import RaceDAO
-from app.dao.race_project_dao import RaceProjectDAO
 from app.utils.auth import require_auth, require_role
 from app.utils.permissions import require_managed_race
 from app.utils.errors import ValidationError
@@ -12,7 +12,7 @@ organizer_bp = Blueprint("organizer", __name__)
 
 reg_service = RegistrationService()
 race_dao = RaceDAO()
-race_project_dao = RaceProjectDAO()
+race_project_service = RaceProjectService()
 
 
 # =============================================
@@ -86,6 +86,10 @@ def reject_registration(registration_id):
 @require_role("organizer")
 @require_managed_race()
 def list_race_race_projects(race_id):
-    """Organizer 查看自己管理的赛事的 RaceProjects 列表"""
-    projects = race_project_dao.find_by_race(race_id)
+    """Organizer 查看自己管理的赛事的 RaceProjects 列表（含基础状态与占位字段）
+
+    装饰器已校验 managed race 范围并存入 g.current_race；
+    Service 层再次校验并格式化响应。
+    """
+    projects = race_project_service.list_for_organizer(race_id, g.current_user_id)
     return success(projects)

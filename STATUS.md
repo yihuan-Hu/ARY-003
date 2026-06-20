@@ -11,6 +11,7 @@
 * `UX-1` 已产出第一轮高保真原型和设计说明，但尚未评审验收，不能直接进入 `M2` 或启动架构设计。
 * **角色 1 已交付**：领域模型、数据库 Schema（users/races/registrations/race_projects）、DAO、Registration 事务入口、API 路由、18 项集成测试全部通过。
 * **角色 2 已交付**：可复用权限策略模块（own/managed_race 装饰器）、Rider withdraw 路由、13 项新增越权/权限单元测试、旧 21 测试兼容隔离。52 项测试全部通过（31 新 + 21 旧）。
+* **角色 4 已交付**：RaceProjectService 层、Route 重构（含 CAConnection[]/Work 占位字段）、Demo 脚本（17/17 步骤通过）、兼容性分析文档（旧 /api/entries 与 Jumbotron 不与 RaceProject API 混淆）。52 项回归测试全部通过。
 
 ## 任务看板
 
@@ -20,6 +21,7 @@
 | `PRD-TEMP-1` 报名 / RaceProject / CA 参赛语义整改 | 待复审 | 已完成首轮文档和原型整改：Registration approved 自动生成 RaceProject、参赛中可新增 CAConnection、CA 接入异常进入评审前风险提示而非硬门禁。需复审是否并入正式 `PRD-1` 基线。 | `docs/registration-ca-rules-alignment.taskbook.md`、`docs/ary-mvp.prd.md`、`docs/ary-domain-analysis.v0.3.md`、`design-prototype/` |
 | `UX-1` UX/UI 高保真原型与设计基线 | 进行中 | 高保真原型已按 IA 重构为 1080P 高密度蓝白竞赛风格页面，并接入样例赛事数据驱动主要页面；页面可见文案已清理 PRD / 实现说明口吻，二级页面口号式大标题已降级为对象名和状态摘要；本轮已按明确审查标准修正首页 IA：Public Header 收敛为 Races / Works / Riders / Cooperation，Race 子页面入口回到具体 Race/赛果模块，底部快捷菜单移除，Hero 与 Featured Race 合体，Latest Results / Past Races 去重，开放报名 / 合作入口命名明确，首页独立 Leaderboards / Live Skill Board 已撤销，未登录态只显示 Login；首页整改经验已沉淀为通用高保真页面工作流 Skill，后续页面需先审 IA 合约、补足领域样例数据并复用已通过页面视觉 / 交互惯例。 | `docs/ux-hifi.taskbook.md`、`.agents/skills/hifi-ui-page-workflow/SKILL.md`、`design-prototype/index.html`、`design-prototype/README.md` |
 | `DEV-1` 领域模型 + 权限 + 数据模型 | **角色 1 已交付** | 领域模型、数据库 Schema（users/races/registrations/race_projects）、DAO、事务入口、API 路由、18 项集成测试全部通过。角色 2 权限策略模块（own/managed_race 装饰器 + 13 项越权测试）同步完成。角色 3/4/5 待推进。 | `backend/app/database.py`、`backend/app/dao/`、`backend/app/services/registration_service.py`、`backend/app/routes/`、`backend/app/utils/permissions.py`、`backend/tests/test_checkpoint.py` |
+| `DEV-4` RaceProject API + Demo（角色 4） | **角色 4 已交付** | RaceProjectService 封装、Route 重构含 CAConnection[]/Work 占位字段、Demo 脚本 17/17 通过、兼容性分析确认旧 /api/entries 与 RaceProject 不混淆。 | `backend/app/services/race_project_service.py`、`backend/demo.py`、`backend/docs/RACEPROJECT_COMPATIBILITY.md` |
 | `DEV-5` CA 接入 / Projection / Live Hall | 细化中 | 已将 CA 作为 Agent Race 工具、比赛信号源和评审参考的口径落盘；CAConnection 可在参赛过程中登记和握手，合法连接数据进入证据链，接入异常进入评审前风险提示；`task_progress` 仅用于 unblock / 说明，不做定期推送，且不设 `session_progress` push。 | `docs/ary-ca-integration-spec.md` |
 | `REL-1` 赛事彩排 / 灰度发布 / 正式发布 | 待开始 | 等待开发任务和验收证据完成。 | `docs/ary-release-ops-plan.md` |
 | `OPS-1` 赛事值守 / 回滚 / 赛后归档 | 待开始 | 等待发布方案和赛事执行计划明确。 | `docs/ary-release-ops-plan.md` |
@@ -42,6 +44,10 @@
 | 角色 2 13 项新增越权/权限单元测试全部通过 | `backend/tests/test_checkpoint.py`（31 tests） |
 | 旧 21 项测试兼容隔离完成，位于 tests/legacy/，全部通过 | `backend/tests/legacy/` |
 | 全量 52 项测试通过（31 新 + 21 旧） | `pytest tests/test_checkpoint.py tests/legacy/ -v` |
+| 角色 4 RaceProjectService 已交付：get_for_rider / list_for_organizer + _format 统一响应 | `backend/app/services/race_project_service.py` |
+| 角色 4 Route 重构已完成：Rider/Organizer RaceProject 响应含 ca_connections[]/work 占位字段 | `backend/app/routes/rider.py`、`backend/app/routes/organizer.py` |
+| 角色 4 Demo 脚本 17/17 步骤通过，覆盖全参赛事实链 | `backend/demo.py` |
+| 角色 4 兼容性分析已交付：旧 /api/entries 与 Jumbotron 不与 RaceProject 混淆 | `backend/docs/RACEPROJECT_COMPATIBILITY.md` |
 | UX-1 高保真原型已按 IA 和 1080P 视口修订并通过本地截图验证 | `design-prototype/index.html`、`design-prototype/*.png` |
 | UX-1 样例赛事数据已生成并接入原型渲染，用于支撑 IA 页面密度和状态差异 | `design-prototype/data/sample-races.json`、`design-prototype/data/sample-races.js`、`design-prototype/script.js` |
 | UX-1 页面可见文案已去除 PRD、需求说明和实现术语口吻 | `design-prototype/index.html`、`design-prototype/script.js`、`design-prototype/data/sample-races.json`、`design-prototype/README.md` |
@@ -74,4 +80,4 @@
 | UX/UI 高保真原型和关键页面状态尚未评审验收 | `M2` 前置风险 |
 | 报名 / RaceProject / CA 参赛语义已完成首轮整改，但仍需人工复审确认是否并入正式基线 | `PRD-TEMP-1` 待复审，重点看评审前风险命名、CAConnection 新增窗口和违规作品处理 |
 | `backend/app/` 包与旧 `backend/app.py` 模块名冲突，旧测试已隔离到 `tests/legacy/` | 集成负责人需在后续合并时处理路径统一 |
-| 角色 3（Registration API）、角色 4（RaceProject API 与 Demo）、角色 5（测试契约与回归）尚未推进 | 第一 Checkpoint 冲刺进行中 |
+| ~~角色 3（Registration API）、角色 4（RaceProject API 与 Demo）、角色 5（测试契约与回归）尚未推进~~ | ✅ 角色 4 已交付；角色 3/5 仍在推进中 |
