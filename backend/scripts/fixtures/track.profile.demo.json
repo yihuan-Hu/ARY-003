@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "1.0",
+  "trackId": "track_demo",
+  "name": "ARY Demo Circuit",
+  "viewBox": {
+    "width": 1920,
+    "height": 1080
+  },
+  "background": {
+    "src": "",
+    "naturalWidth": 1920,
+    "naturalHeight": 1080
+  },
+  "centerline": {
+    "type": "polyline",
+    "closed": true,
+    "smoothing": "catmull-rom",
+    "points": [
+      {"x": 960, "y": 180},
+      {"x": 1550, "y": 220},
+      {"x": 1780, "y": 600},
+      {"x": 1200, "y": 920},
+      {"x": 720, "y": 920},
+      {"x": 140, "y": 600},
+      {"x": 370, "y": 220}
+    ]
+  },
+  "direction": "clockwise",
+  "startFinish": {
+    "s": 0.0,
+    "length": 120
+  },
+  "lanes": [
+    {"id": "lane_1", "offset": 0},
+    {"id": "lane_2", "offset": -35},
+    {"id": "lane_3", "offset": 35},
+    {"id": "lane_4", "offset": -70}
+  ],
+  "checkpoints": [
+    {"id": "cp_1", "s": 0.25, "label": "Alpha"},
+    {"id": "cp_2", "s": 0.5, "label": "Beta"},
+    {"id": "cp_3", "s": 0.75, "label": "Gamma"}
+  ],
+  "messageZones": [],
+  "noBubbleZones": []
+}

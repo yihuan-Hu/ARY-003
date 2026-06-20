@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ary-grs.dev/schemas/submission.schema.json",
+  "title": "Submission",
+  "description": "Organizer submission response. V1 fields remain stable; v2 message fields are optional inputs and returned by the backend.",
+  "type": "object",
+  "required": [
+    "id",
+    "raceId",
+    "riderId",
+    "studentName",
+    "content",
+    "contentProtected",
+    "contentCommitment",
+    "protectionMode",
+    "msgType",
+    "severity",
+    "submittedAt"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^sub_\\d{3,}$" },
+    "raceId": { "type": "string", "pattern": "^race_\\d{3,}$" },
+    "riderId": {
+      "oneOf": [
+        { "type": "string", "pattern": "^rider_\\d{3,}$" },
+        { "type": "null" }
+      ]
+    },
+    "studentName": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "content": {
+      "type": "string",
+      "description": "Public summary only. Private submitted code/content is never returned by public APIs."
+    },
+    "contentProtected": { "type": "boolean", "const": true },
+    "contentCommitment": {
+      "type": "string",
+      "description": "HMAC commitment that can prove the original content without exposing it."
+    },
+    "protectionMode": {
+      "type": "string",
+      "enum": ["sealed_commitment_v1"]
+    },
+    "msgType": {
+      "type": "string",
+      "enum": [
+        "progress_update",
+        "milestone",
+        "strategy_change",
+        "quality_signal",
+        "risk_alert",
+        "obstacle",
+        "violation",
+        "takeover",
+        "pit_stop"
+      ]
+    },
+    "severity": {
+      "type": "string",
+      "enum": ["info", "warning", "critical"]
+    },
+    "submittedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

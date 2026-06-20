@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ary-grs.dev/schemas/track-profile-write.schema.json",
+  "title": "TrackProfileWriteResponse",
+  "description": "Response for POST /api/track-profiles.",
+  "type": "object",
+  "required": ["id", "raceId", "createdAt"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^tprof_\\d{3,}$" },
+    "raceId": { "type": "string", "pattern": "^race_\\d{3,}$" },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

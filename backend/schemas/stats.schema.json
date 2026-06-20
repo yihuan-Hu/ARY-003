@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ary-grs.dev/schemas/stats.schema.json",
+  "title": "Stats",
+  "description": "Organizer statistics returned by GET /api/stats.",
+  "type": "object",
+  "required": [
+    "raceCount",
+    "submissionCount",
+    "studentCount",
+    "submissionsByRace"
+  ],
+  "properties": {
+    "raceCount": { "type": "integer", "minimum": 0 },
+    "submissionCount": { "type": "integer", "minimum": 0 },
+    "studentCount": { "type": "integer", "minimum": 0 },
+    "submissionsByRace": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["raceId", "title", "submissionCount"],
+        "properties": {
+          "raceId": { "type": "string", "pattern": "^race_\\d{3,}$" },
+          "title": { "type": "string" },
+          "submissionCount": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

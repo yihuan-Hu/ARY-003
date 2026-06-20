@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ary-grs.dev/schemas/race.schema.json",
+  "title": "Race",
+  "description": "Organizer race response returned by the Flask backend.",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "description",
+    "startTime",
+    "endTime",
+    "status",
+    "theme",
+    "organizer",
+    "currentRound",
+    "currentPhase",
+    "createdAt",
+    "updatedAt"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^race_\\d{3,}$" },
+    "title": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "description": { "type": "string", "maxLength": 5000 },
+    "startTime": { "type": "string", "format": "date-time" },
+    "endTime": { "type": "string", "format": "date-time" },
+    "status": {
+      "type": "string",
+      "enum": ["upcoming", "open", "judging", "ended"]
+    },
+    "theme": { "type": "string" },
+    "organizer": { "type": "string" },
+    "currentRound": { "type": "integer", "minimum": 1 },
+    "currentPhase": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "submissions": {
+      "type": "array",
+      "items": { "$ref": "submission.schema.json" }
+    }
+  },
+  "additionalProperties": false
+}

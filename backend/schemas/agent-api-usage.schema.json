@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ary-grs.dev/schemas/agent-api-usage.schema.json",
+  "title": "AgentApiUsage",
+  "description": "A detected API usage record for an integrated coding agent.",
+  "type": "object",
+  "required": [
+    "id",
+    "raceId",
+    "entryId",
+    "riderId",
+    "riderName",
+    "provider",
+    "model",
+    "apiEndpoint",
+    "promptTokens",
+    "completionTokens",
+    "totalTokens",
+    "costUsd",
+    "latencyMs",
+    "statusCode",
+    "detectedAt"
+  ],
+  "properties": {
+    "id": { "type": "string", "pattern": "^usage_\\d{3,}$" },
+    "raceId": { "type": "string", "pattern": "^race_\\d{3,}$" },
+    "entryId": { "type": ["string", "null"] },
+    "riderId": { "type": ["string", "null"] },
+    "riderName": { "type": ["string", "null"] },
+    "provider": { "type": "string", "enum": ["codex", "claude", "other"] },
+    "model": { "type": "string" },
+    "apiEndpoint": { "type": "string" },
+    "promptTokens": { "type": "integer", "minimum": 0 },
+    "completionTokens": { "type": "integer", "minimum": 0 },
+    "totalTokens": { "type": "integer", "minimum": 0 },
+    "costUsd": { "type": "number", "minimum": 0 },
+    "latencyMs": { "type": "integer", "minimum": 0 },
+    "statusCode": { "type": "integer", "minimum": 100, "maximum": 599 },
+    "detectedAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

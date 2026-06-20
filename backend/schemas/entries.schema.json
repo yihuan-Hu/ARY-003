@@ -1,0 +1,8 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ary-grs.dev/schemas/entries.schema.json",
+  "title": "RacingEntries",
+  "description": "Response for GET /api/entries?race=.",
+  "type": "array",
+  "items": { "$ref": "entry.schema.json" }
+}

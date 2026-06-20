@@ -1,0 +1,118 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ary-grs.dev/schemas/jumbotron-snapshot.schema.json",
+  "title": "JumbotronSnapshot",
+  "description": "Response for GET /api/jumbotron/snapshot?raceId=.",
+  "type": "object",
+  "required": ["competition", "entries", "kpi", "messages", "agentUsage", "recentApiCalls", "trackProfile"],
+  "properties": {
+    "competition": {
+      "type": "object",
+      "required": ["competitionId", "title", "subtitle", "theme", "organizer", "liveStatus", "currentPhase", "currentRound", "elapsedTime", "systemTime"],
+      "properties": {
+        "competitionId": { "type": "string", "pattern": "^race_\\d{3,}$" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "theme": { "type": "string" },
+        "organizer": { "type": "string" },
+        "liveStatus": { "type": "string", "enum": ["upcoming", "open", "judging", "ended"] },
+        "currentPhase": { "type": "string" },
+        "currentRound": { "type": "integer", "minimum": 1 },
+        "elapsedTime": { "type": "integer", "minimum": 0 },
+        "systemTime": { "type": "string", "format": "date-time" }
+      },
+      "additionalProperties": false
+    },
+    "entries": {
+      "type": "array",
+      "items": { "$ref": "entry.schema.json" }
+    },
+    "kpi": {
+      "type": "object",
+      "required": ["completionRate", "totalTokens", "apiCallCount", "apiDetected", "apiLastDetectedAt", "activeRiders", "onlineRiders", "activeCockpits", "codexTokens", "claudeTokens", "codexShare", "claudeShare", "riskCount", "obstacleCount", "violationCount"],
+      "properties": {
+        "completionRate": { "type": "number", "minimum": 0, "maximum": 1 },
+        "totalTokens": { "type": "integer", "minimum": 0 },
+        "apiCallCount": { "type": "integer", "minimum": 0 },
+        "apiDetected": { "type": "boolean" },
+        "apiLastDetectedAt": { "type": ["string", "null"], "format": "date-time" },
+        "activeRiders": { "type": "integer", "minimum": 0 },
+        "onlineRiders": { "type": "integer", "minimum": 0 },
+        "activeCockpits": { "type": "integer", "minimum": 0 },
+        "codexTokens": { "type": "integer", "minimum": 0 },
+        "claudeTokens": { "type": "integer", "minimum": 0 },
+        "codexShare": { "type": "number", "minimum": 0, "maximum": 1 },
+        "claudeShare": { "type": "number", "minimum": 0, "maximum": 1 },
+        "riskCount": { "type": "integer", "minimum": 0 },
+        "obstacleCount": { "type": "integer", "minimum": 0 },
+        "violationCount": { "type": "integer", "minimum": 0 }
+      },
+      "additionalProperties": false
+    },
+    "messages": {
+      "type": "array",
+      "items": { "$ref": "entry.schema.json#/$defs/ridingMessage" }
+    },
+    "agentUsage": {
+      "type": "object",
+      "required": ["apiDetected", "totalCalls", "totalTokens", "totalCostUsd", "lastDetectedAt", "providers", "recentApiCalls"],
+      "properties": {
+        "apiDetected": { "type": "boolean" },
+        "totalCalls": { "type": "integer", "minimum": 0 },
+        "totalTokens": { "type": "integer", "minimum": 0 },
+        "totalCostUsd": { "type": "number", "minimum": 0 },
+        "lastDetectedAt": { "type": ["string", "null"], "format": "date-time" },
+        "providers": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["provider", "callCount", "promptTokens", "completionTokens", "totalTokens", "costUsd", "avgLatencyMs", "errorCount", "share", "lastDetectedAt", "models"],
+            "properties": {
+              "provider": { "type": "string", "enum": ["codex", "claude", "other"] },
+              "callCount": { "type": "integer", "minimum": 0 },
+              "promptTokens": { "type": "integer", "minimum": 0 },
+              "completionTokens": { "type": "integer", "minimum": 0 },
+              "totalTokens": { "type": "integer", "minimum": 0 },
+              "costUsd": { "type": "number", "minimum": 0 },
+              "avgLatencyMs": { "type": "integer", "minimum": 0 },
+              "errorCount": { "type": "integer", "minimum": 0 },
+              "share": { "type": "number", "minimum": 0, "maximum": 1 },
+              "lastDetectedAt": { "type": ["string", "null"], "format": "date-time" },
+              "models": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["model", "callCount", "totalTokens", "costUsd"],
+                  "properties": {
+                    "model": { "type": "string" },
+                    "callCount": { "type": "integer", "minimum": 0 },
+                    "totalTokens": { "type": "integer", "minimum": 0 },
+                    "costUsd": { "type": "number", "minimum": 0 }
+                  },
+                  "additionalProperties": false
+                }
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "recentApiCalls": {
+          "type": "array",
+          "items": { "$ref": "agent-api-usage.schema.json" }
+        }
+      },
+      "additionalProperties": false
+    },
+    "recentApiCalls": {
+      "type": "array",
+      "items": { "$ref": "agent-api-usage.schema.json" }
+    },
+    "trackProfile": {
+      "oneOf": [
+        { "$ref": "track-profile.schema.json" },
+        { "type": "null" }
+      ]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ary-grs.dev/schemas/rider.schema.json",
+  "title": "Rider",
+  "description": "Response for POST /api/riders and items from GET /api/riders.",
+  "type": "object",
+  "required": ["id", "name", "createdAt"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^rider_\\d{3,}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 100 },
+    "createdAt": { "type": "string", "format": "date-time" }
+  },
+  "additionalProperties": false
+}

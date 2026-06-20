@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ary-grs.dev/schemas/entry.schema.json",
+  "title": "RacingEntrySnapshot",
+  "description": "Response item for POST /api/entries and GET /api/entries?race=.",
+  "type": "object",
+  "required": [
+    "entryId",
+    "raceId",
+    "riderId",
+    "riderName",
+    "projectName",
+    "cockpitId",
+    "caProvider",
+    "overallProgress",
+    "roundProgress",
+    "phaseProgress",
+    "currentPhase",
+    "costTokens",
+    "costUsd",
+    "riskLevel",
+    "obstacleCount",
+    "violationCount",
+    "laneId",
+    "status",
+    "lastMessage",
+    "updatedAt"
+  ],
+  "properties": {
+    "entryId": { "type": "string", "pattern": "^entry_\\d{3,}$" },
+    "raceId": { "type": "string", "pattern": "^race_\\d{3,}$" },
+    "riderId": { "type": "string", "pattern": "^rider_\\d{3,}$" },
+    "riderName": { "type": ["string", "null"] },
+    "projectName": { "type": "string" },
+    "cockpitId": { "type": "null" },
+    "caProvider": { "type": "string", "enum": ["codex", "claude", "other"] },
+    "rank": { "type": "integer", "minimum": 1 },
+    "overallProgress": { "type": "number", "minimum": 0, "maximum": 1 },
+    "roundProgress": { "type": "number", "minimum": 0, "maximum": 1 },
+    "phaseProgress": { "type": "number", "minimum": 0, "maximum": 1 },
+    "currentPhase": { "type": "string" },
+    "costTokens": { "type": "integer", "minimum": 0 },
+    "costUsd": { "type": "number", "minimum": 0 },
+    "riskLevel": { "type": "string", "enum": ["none", "low", "medium", "high"] },
+    "obstacleCount": { "type": "integer", "minimum": 0 },
+    "violationCount": { "type": "integer", "minimum": 0 },
+    "laneId": { "type": ["string", "null"] },
+    "status": {
+      "type": "string",
+      "enum": ["idle", "running", "sprinting", "slowed", "blocked", "pit_stop", "takeover", "finished", "stale"]
+    },
+    "lastMessage": {
+      "oneOf": [
+        { "$ref": "#/$defs/ridingMessage" },
+        { "type": "null" }
+      ]
+    },
+    "updatedAt": { "type": "string", "format": "date-time" }
+  },
+  "$defs": {
+    "ridingMessage": {
+      "type": "object",
+      "required": ["messageId", "entryId", "source", "type", "severity", "summary", "contentProtected", "contentCommitment", "createdAt", "displayMode"],
+      "properties": {
+        "messageId": { "type": "string" },
+        "entryId": { "type": ["string", "null"] },
+        "source": { "type": "string" },
+        "type": {
+          "type": "string",
+          "enum": ["progress_update", "milestone", "strategy_change", "quality_signal", "risk_alert", "obstacle", "violation", "takeover", "pit_stop"]
+        },
+        "severity": { "type": "string", "enum": ["info", "warning", "critical"] },
+        "summary": { "type": "string", "maxLength": 80 },
+        "contentProtected": { "type": "boolean", "const": true },
+        "contentCommitment": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "displayMode": { "type": "string", "enum": ["bubble", "ticker", "both"] }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
