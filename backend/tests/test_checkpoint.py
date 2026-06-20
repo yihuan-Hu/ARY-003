@@ -407,7 +407,6 @@ def test_full_e2e_flow(client, race_a, organizer_a, organizer_a_token, rider_a, 
 
     # 9. 数据库验证只有一个 RaceProject
     from app.database import get_db
-    from flask import g
     with client.application.app_context():
         db = get_db()
         cnt = db.execute(
@@ -415,3 +414,248 @@ def test_full_e2e_flow(client, race_a, organizer_a, organizer_a_token, rider_a, 
             (reg_id,)
         ).fetchone()
         assert cnt["c"] == 1
+
+
+# =============================================
+# 角色 2 扩充：withdraw 退赛
+# =============================================
+
+def test_rider_withdraw_own_registration(client, rider_a_token, race_a):
+    """Rider 可以退赛自己的报名"""
+    submit_resp = client.post(
+        f"/api/v1/rider/races/{race_a['id']}/registrations",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    reg_id = json.loads(submit_resp.data)["data"]["id"]
+
+    resp = client.post(
+        f"/api/v1/rider/registrations/{reg_id}/withdraw",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    assert resp.status_code == 200
+    assert json.loads(resp.data)["data"]["registration"]["status"] == "withdrawn"
+
+
+def test_rider_cannot_withdraw_others_registration(client, rider_a_token, rider_b_token, race_a):
+    """Rider B 不能退赛 Rider A 的报名"""
+    # Rider A 报名
+    submit_resp = client.post(
+        f"/api/v1/rider/races/{race_a['id']}/registrations",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    reg_a_id = json.loads(submit_resp.data)["data"]["id"]
+
+    # Rider B 尝试退赛 Rider A 的报名
+    resp = client.post(
+        f"/api/v1/rider/registrations/{reg_a_id}/withdraw",
+        headers={"Authorization": f"Bearer {rider_b_token}"}
+    )
+    assert resp.status_code == 403
+
+
+def test_withdraw_idempotent_or_invalid_state(client, rider_a_token, race_a):
+    """退赛后再次退赛应返回 422（状态不可退赛）"""
+    submit_resp = client.post(
+        f"/api/v1/rider/races/{race_a['id']}/registrations",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    reg_id = json.loads(submit_resp.data)["data"]["id"]
+
+    # 第一次退赛
+    r1 = client.post(
+        f"/api/v1/rider/registrations/{reg_id}/withdraw",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    assert r1.status_code == 200
+
+    # 第二次退赛（已 withdrawn，不能再退）
+    r2 = client.post(
+        f"/api/v1/rider/registrations/{reg_id}/withdraw",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    assert r2.status_code == 422
+
+
+def test_cannot_withdraw_approved_registration(client, rider_a_token, race_a, organizer_a_token):
+    """已 approved 的报名仍可退赛（作为产品规则验证）"""
+    submit_resp = client.post(
+        f"/api/v1/rider/races/{race_a['id']}/registrations",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    reg_id = json.loads(submit_resp.data)["data"]["id"]
+
+    # Organizer approve
+    client.post(
+        f"/api/v1/organizer/registrations/{reg_id}/approve",
+        headers={"Authorization": f"Bearer {organizer_a_token}"}
+    )
+
+    # Rider 退赛（approved 状态下允许 withdraw）
+    resp = client.post(
+        f"/api/v1/rider/registrations/{reg_id}/withdraw",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    assert resp.status_code == 200
+    assert json.loads(resp.data)["data"]["registration"]["status"] == "withdrawn"
+
+
+def test_public_cannot_withdraw(client, race_a, rider_a_token):
+    """未认证用户不能访问 withdraw 路由"""
+    submit_resp = client.post(
+        f"/api/v1/rider/races/{race_a['id']}/registrations",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    reg_id = json.loads(submit_resp.data)["data"]["id"]
+
+    resp = client.post(f"/api/v1/rider/registrations/{reg_id}/withdraw")
+    assert resp.status_code == 401
+
+
+# =============================================
+# 角色 2 扩充：RaceProject 归属越权
+# =============================================
+
+def test_rider_cannot_view_others_raceproject(client, rider_a_token, rider_b_token, race_a, organizer_a_token):
+    """Rider B 不能查看 Rider A 的 RaceProject"""
+    # Rider A 报名 + approve → 获得 RaceProject
+    submit_resp = client.post(
+        f"/api/v1/rider/races/{race_a['id']}/registrations",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    reg = json.loads(submit_resp.data)["data"]
+    approve_resp = client.post(
+        f"/api/v1/organizer/registrations/{reg['id']}/approve",
+        headers={"Authorization": f"Bearer {organizer_a_token}"}
+    )
+    rp_id = json.loads(approve_resp.data)["data"]["race_project"]["id"]
+
+    # Rider B 尝试查看（应被拒绝）
+    resp = client.get(
+        f"/api/v1/rider/race-projects/{rp_id}",
+        headers={"Authorization": f"Bearer {rider_b_token}"}
+    )
+    assert resp.status_code == 403
+
+
+def test_not_found_registration_returns_404(client, rider_a_token):
+    """不存在的 registration_id 返回 404（而不是 403 泄露存在性）"""
+    resp = client.get(
+        "/api/v1/rider/registrations/99999",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    assert resp.status_code == 404
+
+
+def test_not_found_raceproject_returns_404(client, rider_a_token):
+    """不存在的 race_project_id 返回 404（而不是 403 泄露存在性）"""
+    resp = client.get(
+        "/api/v1/rider/race-projects/99999",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    assert resp.status_code == 404
+
+
+# =============================================
+# 角色 2 扩充：managed_race 列表越权
+# =============================================
+
+def test_organizer_cannot_view_other_race_projects(client, organizer_b_token, race_a):
+    """Organizer B 不能查看 Organizer A 的赛事的 RaceProjects 列表"""
+    resp = client.get(
+        f"/api/v1/organizer/races/{race_a['id']}/race-projects",
+        headers={"Authorization": f"Bearer {organizer_b_token}"}
+    )
+    assert resp.status_code == 403
+
+
+def test_organizer_cannot_view_other_race_registrations(client, organizer_b_token, race_a):
+    """Organizer B 不能查看 Organizer A 的赛事的报名列表"""
+    resp = client.get(
+        f"/api/v1/organizer/races/{race_a['id']}/registrations",
+        headers={"Authorization": f"Bearer {organizer_b_token}"}
+    )
+    assert resp.status_code == 403
+
+
+def test_organizer_can_view_own_race_registrations_and_projects(
+    client, organizer_a_token, race_a, rider_a_token
+):
+    """Organizer A 可以查看自己赛事的报名和 RaceProject（装饰器正确放行）"""
+    # Rider A 报名 + approve
+    submit_resp = client.post(
+        f"/api/v1/rider/races/{race_a['id']}/registrations",
+        headers={"Authorization": f"Bearer {rider_a_token}"}
+    )
+    reg = json.loads(submit_resp.data)["data"]
+    client.post(
+        f"/api/v1/organizer/registrations/{reg['id']}/approve",
+        headers={"Authorization": f"Bearer {organizer_a_token}"}
+    )
+
+    # Organizer A 查看报名列表
+    regs_resp = client.get(
+        f"/api/v1/organizer/races/{race_a['id']}/registrations",
+        headers={"Authorization": f"Bearer {organizer_a_token}"}
+    )
+    assert regs_resp.status_code == 200
+    regs = json.loads(regs_resp.data)["data"]
+    assert len(regs) >= 1
+
+    # Organizer A 查看 RaceProject 列表
+    rps_resp = client.get(
+        f"/api/v1/organizer/races/{race_a['id']}/race-projects",
+        headers={"Authorization": f"Bearer {organizer_a_token}"}
+    )
+    assert rps_resp.status_code == 200
+    rps = json.loads(rps_resp.data)["data"]
+    assert len(rps) >= 1
+
+
+# =============================================
+# 角色 2 扩充：权限装饰器单元验证
+# =============================================
+
+def test_permission_helper_check_own_registration(app, race_a, rider_a, rider_b):
+    """直接调用 check_own_registration：owner 通过，非 owner 抛 ForbiddenError"""
+    from app.utils.permissions import check_own_registration
+    from app.utils.errors import ForbiddenError, NotFoundError
+    from app.database import get_db
+
+    with app.app_context():
+        db = get_db()
+        cursor = db.execute(
+            "INSERT INTO registrations (race_id, user_id, status) VALUES (?, ?, 'submitted')",
+            (race_a["id"], rider_a["id"])
+        )
+        db.commit()
+        reg_id = cursor.lastrowid
+
+        # Owner 应通过
+        reg = check_own_registration(reg_id, rider_a["id"])
+        assert reg["id"] == reg_id
+        assert reg["status"] == "submitted"
+
+        # 非 owner 应抛 ForbiddenError
+        import pytest
+        with pytest.raises(ForbiddenError):
+            check_own_registration(reg_id, rider_b["id"])
+
+        # 不存在的 registration 抛 NotFoundError
+        with pytest.raises(NotFoundError):
+            check_own_registration(99999, rider_a["id"])
+
+
+def test_permission_helper_check_managed_race(app, race_a, organizer_a, organizer_b):
+    """直接调用 check_managed_race：owner 通过，非 owner 抛 ForbiddenError"""
+    from app.utils.permissions import check_managed_race
+    from app.utils.errors import ForbiddenError
+
+    with app.app_context():
+        # Owner 应通过
+        race = check_managed_race(race_a["id"], organizer_a["id"])
+        assert race["id"] == race_a["id"]
+
+        # 非 owner 应抛 ForbiddenError
+        import pytest
+        with pytest.raises(ForbiddenError):
+            check_managed_race(race_a["id"], organizer_b["id"])
