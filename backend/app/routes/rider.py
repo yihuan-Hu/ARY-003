@@ -1,10 +1,9 @@
-from flask import Blueprint, request, g
+from flask import Blueprint, g
 
 from app.services.registration_service import RegistrationService
 from app.services.race_project_service import RaceProjectService
 from app.utils.auth import require_auth, require_role
 from app.utils.permissions import require_own_registration, require_own_race_project
-from app.utils.errors import ForbiddenError
 from app.utils.response import success, created
 
 rider_bp = Blueprint("rider", __name__)
@@ -29,7 +28,7 @@ def submit_registration(race_id):
 @require_auth
 @require_role("contestant")
 def list_my_registrations():
-    registrations = reg_service.dao.find_by_user(g.current_user_id)
+    registrations = reg_service.list_for_rider(g.current_user_id)
     return success(registrations)
 
 

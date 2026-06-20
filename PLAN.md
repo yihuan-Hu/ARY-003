@@ -17,6 +17,7 @@
 | `PRD-TEMP-1` 报名 / RaceProject / CA 参赛语义整改 | 已完成首轮整改并进入待复审：PRD、领域、CA 契约、IA、UX / 高保真原型、权限、QA、OPS 和计划文档已同步新口径。 | `docs/registration-ca-rules-alignment.taskbook.md` |
 | `UX-1` UX/UI 高保真原型与设计基线 | 已产出 IA 对齐版 1080P 高密度高保真原型，后续页面按高保真页面工作流继续深化。 | `docs/ux-hifi.taskbook.md`、`.agents/skills/hifi-ui-page-workflow/SKILL.md`、`design-prototype/index.html` |
 | `DEV-1` 领域模型 + 权限 + 数据模型 | 输出聚合边界、数据模型草案和接口鉴权规则。 | `docs/ary-domain-analysis.v0.3.md` |
+| `DEV-4` Registration API（角色 3） | 已完成报名提交、查询、审核、退赛和状态机；approved 原子幂等生成 RaceProject，重复报名返回 409，CA 接入状态不驱动 withdrawn；两轮评测问题已收口：写事务内重读，Registration / RaceProject own 资源枚举统一 404，详情查询去重并移除 DAO 死代码。 | `riding-record.md`、`角色三_评测报告.md`、`backend/tests/test_registration_state_machine.py` |
 | `DEV-5` CA 接入 / Projection / Live Hall | 已按新口径整改 CA 原始骑行状态消息草案：CAConnection 可在参赛过程中登记和握手，合法连接数据进入证据链，接入异常进入评审前风险提示；继续收敛投影规则、字段必填性、push / fetch 边界和幂等规则。 | `docs/ary-ca-integration-spec.md` |
 
 ## 近期里程碑

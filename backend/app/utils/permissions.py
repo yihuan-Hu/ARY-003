@@ -23,10 +23,9 @@ from app.utils.errors import ForbiddenError, NotFoundError
 def check_own_registration(registration_id: int, user_id: int) -> dict:
     """校验报名归属，返回 registration dict 或 raise"""
     reg = RegistrationDAO().find_by_id(registration_id)
-    if reg is None:
+    # own 资源对非 owner 隐藏存在性，避免通过 404/403 差异枚举报名 ID。
+    if reg is None or reg["user_id"] != user_id:
         raise NotFoundError("Registration not found")
-    if reg["user_id"] != user_id:
-        raise ForbiddenError("You can only access your own registration")
     return reg
 
 
@@ -42,7 +41,7 @@ def check_own_race_project(race_project_id: int, user_id: int) -> dict:
 
     reg = RegistrationDAO().find_by_id(rp["registration_id"])
     if reg is None or reg["user_id"] != user_id:
-        raise ForbiddenError("You can only access your own RaceProject")
+        raise NotFoundError("RaceProject not found")
 
     return rp
 

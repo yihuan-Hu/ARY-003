@@ -303,16 +303,16 @@ def main():
         f"/api/v1/rider/registrations/{reg_id}",
         headers={"Authorization": f"Bearer {rider_b_token}"}
     )
-    check("10.1", rider_b_view, 403,
-          "Rider B 无法查看 Rider A 的 Registration")
+    check("10.1", rider_b_view, 404,
+          "Rider B 无法枚举或查看 Rider A 的 Registration")
 
     # Rider B 不能查看 Rider A 的 RaceProject
     rider_b_rp = client.get(
         f"/api/v1/rider/race-projects/{rp_id}",
         headers={"Authorization": f"Bearer {rider_b_token}"}
     )
-    check("10.2", rider_b_rp, 403,
-          "Rider B 无法查看 Rider A 的 RaceProject")
+    check("10.2", rider_b_rp, 404,
+          "Rider B 无法枚举或查看 Rider A 的 RaceProject")
 
     # Organizer B 不能审核 Organizer A 的 Race 的报名
     org_b_approve = client.post(

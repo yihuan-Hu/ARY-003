@@ -2,7 +2,7 @@ from app.database import get_db
 
 
 class RegistrationDAO:
-    def create(self, race_id: int, user_id: int) -> dict:
+    def create(self, race_id: int, user_id: int, *, commit: bool = True) -> dict:
         """创建报名，UNIQUE(race_id, user_id) 保证同一用户同一赛事只有一个报名"""
         db = get_db()
         cursor = db.execute(
@@ -10,7 +10,8 @@ class RegistrationDAO:
                VALUES (?, ?, 'submitted', datetime('now'), datetime('now'), datetime('now'))""",
             (race_id, user_id),
         )
-        db.commit()
+        if commit:
+            db.commit()
         return self.find_by_id(cursor.lastrowid)
 
     def find_by_id(self, registration_id: int) -> dict | None:
@@ -42,22 +43,35 @@ class RegistrationDAO:
         ).fetchall()
         return [dict(r) for r in rows]
 
-    def update_status(self, registration_id: int, new_status: str, reviewer_user_id: int | None = None) -> dict | None:
-        db = get_db()
-        db.execute(
-            """UPDATE registrations
-               SET status = ?, reviewed_at = datetime('now'),
-                   reviewed_by_user_id = ?, updated_at = datetime('now')
-               WHERE id = ?""",
-            (new_status, reviewer_user_id, registration_id),
-        )
-        db.commit()
-        return self.find_by_id(registration_id)
+    def update_status(
+        self,
+        registration_id: int,
+        new_status: str,
+        reviewer_user_id: int | None = None,
+        *,
+        commit: bool = True,
+    ) -> dict | None:
+        """更新报名状态。
 
-    def count_by_race(self, race_id: int) -> int:
+        reviewer_user_id 仅用于 Organizer 审核动作。Rider withdraw 时保留原审核信息，
+        避免把退赛误记为一次匿名审核。
+        """
         db = get_db()
-        row = db.execute(
-            "SELECT COUNT(*) as cnt FROM registrations WHERE race_id = ?",
-            (race_id,),
-        ).fetchone()
-        return row["cnt"] if row else 0
+        if reviewer_user_id is None:
+            db.execute(
+                """UPDATE registrations
+                   SET status = ?, updated_at = datetime('now')
+                   WHERE id = ?""",
+                (new_status, registration_id),
+            )
+        else:
+            db.execute(
+                """UPDATE registrations
+                   SET status = ?, reviewed_at = datetime('now'),
+                       reviewed_by_user_id = ?, updated_at = datetime('now')
+                   WHERE id = ?""",
+                (new_status, reviewer_user_id, registration_id),
+            )
+        if commit:
+            db.commit()
+        return self.find_by_id(registration_id)

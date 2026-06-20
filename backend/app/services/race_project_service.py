@@ -56,10 +56,8 @@ class RaceProjectService:
 
         # 验证归属链
         reg = self.registration_dao.find_by_id(rp["registration_id"])
-        if reg is None:
-            raise NotFoundError("Associated registration not found")
-        if reg["user_id"] != user_id:
-            raise ForbiddenError("You can only access your own RaceProject")
+        if reg is None or reg["user_id"] != user_id:
+            raise NotFoundError("RaceProject not found")
 
         return self._format(rp)
 

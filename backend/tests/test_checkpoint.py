@@ -210,7 +210,7 @@ def test_rider_cannot_view_others_registration(client, rider_b_token, race_a, ri
         f"/api/v1/rider/registrations/{reg_a_id}",
         headers={"Authorization": f"Bearer {rider_b_token}"}
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 def test_organizer_cannot_review_other_race(client, rider_a_token, race_a, organizer_b_token, rider_b):
@@ -450,7 +450,7 @@ def test_rider_cannot_withdraw_others_registration(client, rider_a_token, rider_
         f"/api/v1/rider/registrations/{reg_a_id}/withdraw",
         headers={"Authorization": f"Bearer {rider_b_token}"}
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 def test_withdraw_idempotent_or_invalid_state(client, rider_a_token, race_a):
@@ -534,7 +534,7 @@ def test_rider_cannot_view_others_raceproject(client, rider_a_token, rider_b_tok
         f"/api/v1/rider/race-projects/{rp_id}",
         headers={"Authorization": f"Bearer {rider_b_token}"}
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 def test_not_found_registration_returns_404(client, rider_a_token):
@@ -616,9 +616,9 @@ def test_organizer_can_view_own_race_registrations_and_projects(
 # =============================================
 
 def test_permission_helper_check_own_registration(app, race_a, rider_a, rider_b):
-    """直接调用 check_own_registration：owner 通过，非 owner 抛 ForbiddenError"""
+    """直接调用 check_own_registration：owner 通过，非 owner 按不存在处理"""
     from app.utils.permissions import check_own_registration
-    from app.utils.errors import ForbiddenError, NotFoundError
+    from app.utils.errors import NotFoundError
     from app.database import get_db
 
     with app.app_context():
@@ -635,9 +635,9 @@ def test_permission_helper_check_own_registration(app, race_a, rider_a, rider_b)
         assert reg["id"] == reg_id
         assert reg["status"] == "submitted"
 
-        # 非 owner 应抛 ForbiddenError
+        # 非 owner 与不存在资源统一抛 NotFoundError，避免资源枚举
         import pytest
-        with pytest.raises(ForbiddenError):
+        with pytest.raises(NotFoundError):
             check_own_registration(reg_id, rider_b["id"])
 
         # 不存在的 registration 抛 NotFoundError

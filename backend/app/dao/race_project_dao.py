@@ -2,7 +2,7 @@ from app.database import get_db
 
 
 class RaceProjectDAO:
-    def create(self, registration_id: int) -> dict:
+    def create(self, registration_id: int, *, commit: bool = True) -> dict:
         """创建 RaceProject，UNIQUE(registration_id) 保证一对一"""
         db = get_db()
         cursor = db.execute(
@@ -10,7 +10,8 @@ class RaceProjectDAO:
                VALUES (?, datetime('now'), datetime('now'))""",
             (registration_id,),
         )
-        db.commit()
+        if commit:
+            db.commit()
         return self.find_by_id(cursor.lastrowid)
 
     def find_by_id(self, race_project_id: int) -> dict | None:

@@ -1,3 +1,5 @@
+import sqlite3
+
 from app.database import get_db
 from app.dao.registration_dao import RegistrationDAO
 from app.dao.race_project_dao import RaceProjectDAO
@@ -11,6 +13,28 @@ from app.utils.errors import (
 
 
 class RegistrationService:
+    """Registration 业务状态机。
+
+    CAConnection / RaceProject 接入健康度不属于本状态机，任何 CA 状态都不会触发
+    Registration 自动 withdrawn。
+    """
+
+    STATUS_SUBMITTED = "submitted"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+    STATUS_WITHDRAWN = "withdrawn"
+
+    ALLOWED_TRANSITIONS = {
+        STATUS_SUBMITTED: {
+            STATUS_APPROVED,
+            STATUS_REJECTED,
+            STATUS_WITHDRAWN,
+        },
+        STATUS_APPROVED: {STATUS_WITHDRAWN},
+        STATUS_REJECTED: set(),
+        STATUS_WITHDRAWN: set(),
+    }
+
     def __init__(self):
         self.dao = RegistrationDAO()
         self.race_project_dao = RaceProjectDAO()
@@ -18,7 +42,7 @@ class RegistrationService:
 
     def submit(self, race_id: int, user_id: int) -> dict:
         """Rider 提交报名"""
-        # 检查 Race 是否存在且可报名
+        # 快速失败检查；真正的状态与重复校验会在写事务内再次执行。
         race = self.race_dao.find_by_id(race_id)
         if race is None:
             raise NotFoundError("Race not found")
@@ -30,7 +54,63 @@ class RegistrationService:
         if existing:
             raise ConflictError("You have already registered for this race")
 
-        return self.dao.create(race_id, user_id)
+        db = get_db()
+        try:
+            # 串行化 Race 状态变更与报名写入，避免预检查后 Race 已结束仍成功报名。
+            db.execute("BEGIN IMMEDIATE")
+            race = self.race_dao.find_by_id(race_id)
+            if race is None:
+                raise NotFoundError("Race not found")
+            if race["status"] not in ("upcoming", "open"):
+                raise InvalidStateError(
+                    f"Cannot register for race in '{race['status']}' status"
+                )
+            if self.dao.find_by_race_and_user(race_id, user_id):
+                raise ConflictError("You have already registered for this race")
+
+            registration = self.dao.create(race_id, user_id, commit=False)
+            db.commit()
+            return registration
+        except sqlite3.IntegrityError as error:
+            # 并发请求可能同时通过上面的读取检查，数据库唯一约束是最终防线。
+            db.rollback()
+            if self.dao.find_by_race_and_user(race_id, user_id):
+                raise ConflictError("You have already registered for this race") from error
+            raise
+        except Exception:
+            db.rollback()
+            raise
+
+    def get_for_rider(self, registration_id: int, user_id: int) -> dict:
+        registration = self.dao.find_by_id(registration_id)
+        # 不区分“不存在”和“不属于当前 Rider”，避免通过 404/403 枚举资源。
+        if registration is None or registration["user_id"] != user_id:
+            raise NotFoundError("Registration not found")
+        return registration
+
+    def list_for_rider(self, user_id: int) -> list[dict]:
+        return self.dao.find_by_user(user_id)
+
+    def list_for_organizer(self, race_id: int, organizer_user_id: int) -> list[dict]:
+        race = self.race_dao.find_by_id(race_id)
+        if race is None:
+            raise NotFoundError("Race not found")
+        if race["created_by_user_id"] != organizer_user_id:
+            raise ForbiddenError("You can only manage your own races")
+        return self.dao.find_by_race(race_id)
+
+    def _require_transition(self, current_status: str, target_status: str) -> None:
+        allowed_targets = self.ALLOWED_TRANSITIONS.get(current_status, set())
+        if target_status not in allowed_targets:
+            raise InvalidStateError(
+                f"Cannot transition registration from '{current_status}' "
+                f"to '{target_status}'"
+            )
+
+    def _require_reviewer_scope(self, registration: dict, reviewer_user_id: int) -> None:
+        race = self.race_dao.find_by_id(registration["race_id"])
+        if race is None or race["created_by_user_id"] != reviewer_user_id:
+            raise ForbiddenError("Only the race organizer can review this registration")
 
     def approve_registration(self, registration_id: int, reviewer_user_id: int) -> dict:
         """
@@ -43,40 +123,43 @@ class RegistrationService:
         2. 重复审批不创建第二个 RaceProject（双重幂等）
         3. 只有 submitted → approved 才生成 RaceProject
         """
-        db = get_db()
-
-        # 验证 registration 存在
         reg = self.dao.find_by_id(registration_id)
         if reg is None:
             raise NotFoundError("Registration not found")
-
-        # 验证审核者是该 Race 的 Organizer
-        race = self.race_dao.find_by_id(reg["race_id"])
-        if race is None or race["created_by_user_id"] != reviewer_user_id:
-            raise ForbiddenError("Only the race organizer can review this registration")
-
-        # 如果已经 approved，幂等返回已有的 RaceProject
-        if reg["status"] == "approved":
-            existing_rp = self.race_project_dao.find_by_registration(registration_id)
-            return {
-                "registration": reg,
-                "race_project": existing_rp,
-                "idempotent": True,
-            }
-
-        # 只有 submitted 状态可以 approve
-        if reg["status"] != "submitted":
-            raise InvalidStateError(
-                f"Cannot approve registration in '{reg['status']}' status. "
-                "Only 'submitted' registrations can be approved."
-            )
+        self._require_reviewer_scope(reg, reviewer_user_id)
 
         # === 事务边界：approve + 创建 RaceProject 必须原子 ===
+        db = get_db()
         try:
-            # 1. 更新状态
-            updated_reg = self.dao.update_status(registration_id, "approved", reviewer_user_id)
+            # IMMEDIATE 让并发审核串行化；进入事务后重新读取，避免使用陈旧状态。
+            db.execute("BEGIN IMMEDIATE")
+            reg = self.dao.find_by_id(registration_id)
+            self._require_reviewer_scope(reg, reviewer_user_id)
 
-            # 2. 幂等检查（双重保险：即使绕过 Service 直接调 DAO，DB UNIQUE 也会拦截）
+            # 重复 approve 幂等返回；若历史脏数据缺少 RaceProject，则在同一入口补齐。
+            if reg["status"] == self.STATUS_APPROVED:
+                race_project = self.race_project_dao.find_by_registration(registration_id)
+                if race_project is None:
+                    race_project = self.race_project_dao.create(
+                        registration_id,
+                        commit=False,
+                    )
+                db.commit()
+                return {
+                    "registration": reg,
+                    "race_project": race_project,
+                    "idempotent": True,
+                }
+
+            self._require_transition(reg["status"], self.STATUS_APPROVED)
+
+            updated_reg = self.dao.update_status(
+                registration_id,
+                self.STATUS_APPROVED,
+                reviewer_user_id,
+                commit=False,
+            )
+
             existing_rp = self.race_project_dao.find_by_registration(registration_id)
             if existing_rp:
                 db.commit()
@@ -86,8 +169,10 @@ class RegistrationService:
                     "idempotent": True,
                 }
 
-            # 3. 创建 RaceProject
-            race_project = self.race_project_dao.create(registration_id)
+            race_project = self.race_project_dao.create(
+                registration_id,
+                commit=False,
+            )
 
             db.commit()
             return {
@@ -105,38 +190,58 @@ class RegistrationService:
         if reg is None:
             raise NotFoundError("Registration not found")
 
-        # 验证审核者是该 Race 的 Organizer
-        race = self.race_dao.find_by_id(reg["race_id"])
-        if race is None or race["created_by_user_id"] != reviewer_user_id:
-            raise ForbiddenError("Only the race organizer can review this registration")
+        self._require_reviewer_scope(reg, reviewer_user_id)
+        self._require_transition(reg["status"], self.STATUS_REJECTED)
 
-        if reg["status"] not in ("submitted",):
-            raise InvalidStateError(
-                f"Cannot reject registration in '{reg['status']}' status"
+        db = get_db()
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            reg = self.dao.find_by_id(registration_id)
+            self._require_reviewer_scope(reg, reviewer_user_id)
+            self._require_transition(reg["status"], self.STATUS_REJECTED)
+
+            existing_rp = self.race_project_dao.find_by_registration(registration_id)
+            if existing_rp is not None:
+                raise InvalidStateError(
+                    "RaceProject exists for rejected registration—data inconsistency"
+                )
+
+            updated_reg = self.dao.update_status(
+                registration_id,
+                self.STATUS_REJECTED,
+                reviewer_user_id,
+                commit=False,
             )
-
-        updated_reg = self.dao.update_status(registration_id, "rejected", reviewer_user_id)
-
-        # rejected 不生成 RaceProject，确认没有
-        existing_rp = self.race_project_dao.find_by_registration(registration_id)
-        if existing_rp is not None:
-            raise InvalidStateError("RaceProject exists for rejected registration—data inconsistency")
-
-        return {"registration": updated_reg}
+            db.commit()
+            return {"registration": updated_reg}
+        except Exception:
+            db.rollback()
+            raise
 
     def withdraw(self, registration_id: int, user_id: int) -> dict:
         """Rider 退赛"""
         reg = self.dao.find_by_id(registration_id)
-        if reg is None:
+        if reg is None or reg["user_id"] != user_id:
             raise NotFoundError("Registration not found")
 
-        if reg["user_id"] != user_id:
-            raise ForbiddenError("You can only withdraw your own registration")
+        self._require_transition(reg["status"], self.STATUS_WITHDRAWN)
 
-        if reg["status"] not in ("submitted", "approved"):
-            raise InvalidStateError(
-                f"Cannot withdraw registration in '{reg['status']}' status"
+        db = get_db()
+        try:
+            # 与 approve/reject 使用同一写锁策略，并在事务内重读防止 TOCTOU。
+            db.execute("BEGIN IMMEDIATE")
+            reg = self.dao.find_by_id(registration_id)
+            if reg is None or reg["user_id"] != user_id:
+                raise NotFoundError("Registration not found")
+            self._require_transition(reg["status"], self.STATUS_WITHDRAWN)
+
+            updated_reg = self.dao.update_status(
+                registration_id,
+                self.STATUS_WITHDRAWN,
+                commit=False,
             )
-
-        updated_reg = self.dao.update_status(registration_id, "withdrawn", None)
-        return {"registration": updated_reg}
+            db.commit()
+            return {"registration": updated_reg}
+        except Exception:
+            db.rollback()
+            raise

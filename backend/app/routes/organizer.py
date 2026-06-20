@@ -55,7 +55,7 @@ def list_my_races():
 @require_managed_race()
 def list_race_registrations(race_id):
     """Organizer 查看自己管理的赛事的报名列表"""
-    registrations = reg_service.dao.find_by_race(race_id)
+    registrations = reg_service.list_for_organizer(race_id, g.current_user_id)
     return success(registrations)
 
 
