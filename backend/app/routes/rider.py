@@ -2,17 +2,29 @@ from flask import Blueprint, g, request
 
 from app.services.registration_service import RegistrationService
 from app.services.race_project_service import RaceProjectService
+from app.services.work_service import WorkService
+from app.services.coach_service import RidingCoachService
 from app.dao.race_dao import RaceDAO
+from app.dao.work_dao import WorkDAO
 from app.utils.auth import require_auth, require_role
-from app.utils.permissions import require_own_registration, require_own_race_project
+from app.utils.permissions import (
+    require_own_registration,
+    require_own_race_project,
+    require_own_work,
+)
 from app.utils.response import success, created
 from app.utils.errors import ValidationError
+from app.utils.validation import validate
+from app.schemas import WorkCreateSchema
 
 rider_bp = Blueprint("rider", __name__)
 
 reg_service = RegistrationService()
 race_project_service = RaceProjectService()
 race_dao = RaceDAO()
+work_service = WorkService()
+work_dao = WorkDAO()
+coach_service = RidingCoachService()
 
 
 def _pagination_args():
@@ -99,3 +111,66 @@ def get_my_race_project(race_project_id):
     - work: null          → 未来主 Work 链接占位
     """
     return success(race_project_service._format(g.current_race_project))
+
+
+@rider_bp.route(
+    "/api/v1/rider/race-projects/<int:race_project_id>/next-actions",
+    methods=["GET"],
+)
+@require_auth
+@require_role("rider")
+@require_own_race_project()
+def next_actions(race_project_id):
+    return success(
+        coach_service.get_next_actions(race_project_id, g.current_user_id)
+    )
+
+
+@rider_bp.route(
+    "/api/v1/rider/race-projects/<int:race_project_id>/works", methods=["POST"]
+)
+@require_auth
+@require_role("rider")
+@require_own_race_project()
+@validate(WorkCreateSchema())
+def create_work(race_project_id):
+    work = work_service.create_draft(
+        race_project_id, g.current_user_id, g.validated_body
+    )
+    return created(work)
+
+
+@rider_bp.route(
+    "/api/v1/rider/race-projects/<int:race_project_id>/works", methods=["GET"]
+)
+@require_auth
+@require_role("rider")
+@require_own_race_project()
+def list_works(race_project_id):
+    return success(work_dao.find_by_race_project(race_project_id))
+
+
+@rider_bp.route("/api/v1/rider/works/<int:work_id>", methods=["PUT"])
+@require_auth
+@require_role("rider")
+@require_own_work()
+@validate(WorkCreateSchema())
+def update_work(work_id):
+    return success(work_service.update(work_id, g.current_user_id, g.validated_body))
+
+
+@rider_bp.route("/api/v1/rider/works/<int:work_id>/submit", methods=["POST"])
+@require_auth
+@require_role("rider")
+@require_own_work()
+def submit_work(work_id):
+    return success(work_service.submit(work_id, g.current_user_id))
+
+
+@rider_bp.route("/api/v1/rider/works/<int:work_id>", methods=["DELETE"])
+@require_auth
+@require_role("rider")
+@require_own_work()
+def delete_work(work_id):
+    work_service.delete(work_id, g.current_user_id)
+    return success({"deleted": True})

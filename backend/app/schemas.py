@@ -47,3 +47,27 @@ class RaceEditSchema(Schema):
     judging_tiebreaker = fields.Str(
         validate=validate.OneOf(["avg", "median", "trimmed_mean"])
     )
+
+
+class WorkCreateSchema(Schema):
+    title = fields.Str(required=True, validate=validate.Length(min=1, max=200))
+    description = fields.Str(load_default="", validate=validate.Length(max=5000))
+    repo_url = fields.Str(load_default="", validate=validate.Length(max=500))
+    demo_url = fields.Str(load_default="", validate=validate.Length(max=500))
+    video_url = fields.Str(load_default="", validate=validate.Length(max=500))
+    cover_image_url = fields.Str(load_default="", validate=validate.Length(max=500))
+    screenshot_urls = fields.Str(load_default="[]")
+    readme_body = fields.Str(load_default="")
+    visibility = fields.Str(
+        load_default="private", validate=validate.OneOf(["private", "public"])
+    )
+
+
+class AnnouncementCreateSchema(Schema):
+    title = fields.Str(required=True, validate=validate.Length(min=1, max=200))
+    body = fields.Str(load_default="", validate=validate.Length(max=10000))
+
+
+class AnnouncementEditSchema(Schema):
+    title = fields.Str(validate=validate.Length(min=1, max=200))
+    body = fields.Str(validate=validate.Length(max=10000))

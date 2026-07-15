@@ -1,6 +1,11 @@
 from app.dao.race_dao import RaceDAO
 from app.database import get_db
-from app.utils.errors import ForbiddenError, InvalidStateError, NotFoundError
+from app.utils.errors import (
+    ForbiddenError,
+    InvalidStateError,
+    NotFoundError,
+    ValidationError,
+)
 from app.utils.logging import audit_log
 
 
@@ -32,6 +37,8 @@ class RaceService:
         payload = dict(data)
         payload.pop("status", None)
         name = payload.pop("name").strip()
+        if not name:
+            raise ValidationError("Race name cannot be blank")
         if not payload.get("slug"):
             payload["slug"] = name.lower().replace(" ", "-")
         db = get_db()
@@ -66,6 +73,11 @@ class RaceService:
         return updated
 
     def edit(self, race_id: int, user_id: int, data: dict) -> dict:
+        payload = dict(data)
+        if "name" in payload:
+            payload["name"] = payload["name"].strip()
+            if not payload["name"]:
+                raise ValidationError("Race name cannot be blank")
         db = get_db()
         try:
             db.execute("BEGIN IMMEDIATE")
@@ -74,7 +86,7 @@ class RaceService:
                 raise InvalidStateError(
                     "Race can only be edited in draft/published/registration status"
                 )
-            updated = self.dao.update_fields(race_id, data, commit=False)
+            updated = self.dao.update_fields(race_id, payload, commit=False)
             db.commit()
         except Exception:
             db.rollback()

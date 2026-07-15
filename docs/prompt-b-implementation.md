@@ -327,10 +327,26 @@ WHEN (
     JOIN races r ON reg.race_id = r.id
     WHERE rp.id = NEW.race_project_id
 ) IN ('judging', 'completed', 'archived')
+AND (
+    OLD.title IS NOT NEW.title OR OLD.description IS NOT NEW.description OR
+    OLD.repo_url IS NOT NEW.repo_url OR OLD.demo_url IS NOT NEW.demo_url OR
+    OLD.video_url IS NOT NEW.video_url OR
+    OLD.cover_image_url IS NOT NEW.cover_image_url OR
+    OLD.screenshot_urls IS NOT NEW.screenshot_urls OR
+    OLD.readme_body IS NOT NEW.readme_body OR
+    OLD.work_status IS NOT NEW.work_status OR
+    OLD.visibility IS NOT NEW.visibility OR
+    OLD.content_hash IS NOT NEW.content_hash OR
+    OLD.content_commitment IS NOT NEW.content_commitment OR
+    OLD.prev_hash IS NOT NEW.prev_hash OR OLD.version IS NOT NEW.version OR
+    OLD.submitted_at IS NOT NEW.submitted_at
+)
 BEGIN
     SELECT RAISE(ABORT, 'works are sealed once judging begins');
 END;
 ```
+
+同时创建 `trg_works_sealed_delete` 拒绝 judging/completed/archived 状态下的作品删除。UPDATE 触发器只封存 Rider 内容和提交字段，必须允许 C 继续写入 `disqualified` / `disqualify_reason` 审核处置字段。
 
 ### 3.2 `race_projects` 表加字段
 

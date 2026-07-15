@@ -17,17 +17,29 @@ class WorkDAO(BaseDAO):
     }
 
     def create_draft(self, race_project_id: int, title: str, **fields) -> dict:
+        return self.create_draft_uncommitted(
+            race_project_id, title, **fields, _commit=True
+        )
+
+    def create_draft_uncommitted(
+        self, race_project_id: int, title: str, **fields
+    ) -> dict:
+        commit = fields.pop("_commit", False)
         allowed_fields = {
             key: value
             for key, value in fields.items()
             if key in self._draft_fields
         }
-        return self.create(
-            race_project_id=race_project_id,
-            title=title,
-            work_status="draft",
-            **allowed_fields,
+        columns = ["race_project_id", "title", "work_status", *allowed_fields.keys()]
+        values = [race_project_id, title, "draft", *allowed_fields.values()]
+        db = get_db()
+        cursor = db.execute(
+            f"INSERT INTO works ({', '.join(columns)}) VALUES ({', '.join('?' for _ in columns)})",
+            tuple(values),
         )
+        if commit:
+            db.commit()
+        return self.find_by_id(cursor.lastrowid)
 
     def find_by_race_project(self, race_project_id: int) -> list[dict]:
         db = get_db()
@@ -74,6 +86,19 @@ class WorkDAO(BaseDAO):
         content_commitment: str,
         prev_hash: str | None = None,
     ) -> dict | None:
+        return self.mark_submitted_uncommitted(
+            work_id, content_hash, content_commitment, prev_hash, commit=True
+        )
+
+    def mark_submitted_uncommitted(
+        self,
+        work_id: int,
+        content_hash: str,
+        content_commitment: str,
+        prev_hash: str | None,
+        *,
+        commit: bool = False,
+    ) -> dict | None:
         db = get_db()
         db.execute(
             """UPDATE works
@@ -81,13 +106,36 @@ class WorkDAO(BaseDAO):
                    content_hash = ?,
                    content_commitment = ?,
                    prev_hash = ?,
+                   version = CASE WHEN content_hash = '' THEN version ELSE version + 1 END,
                    submitted_at = COALESCE(submitted_at, datetime('now')),
                    updated_at = datetime('now')
                WHERE id = ?""",
             (content_hash, content_commitment, prev_hash, work_id),
         )
-        db.commit()
+        if commit:
+            db.commit()
         return self.find_by_id(work_id)
+
+    def update_content_uncommitted(self, work_id: int, fields: dict) -> dict | None:
+        allowed = {
+            key: value
+            for key, value in fields.items()
+            if key in self._draft_fields | {"title"}
+        }
+        if not allowed:
+            return self.find_by_id(work_id)
+        assignments = ", ".join(f"{key} = ?" for key in allowed)
+        db = get_db()
+        db.execute(
+            f"""UPDATE works SET {assignments}, work_status = 'draft',
+                updated_at = datetime('now') WHERE id = ?""",
+            tuple(allowed.values()) + (work_id,),
+        )
+        return self.find_by_id(work_id)
+
+    def delete_uncommitted(self, work_id: int) -> bool:
+        cursor = get_db().execute("DELETE FROM works WHERE id = ?", (work_id,))
+        return cursor.rowcount > 0
 
     def set_disqualified(self, work_id: int, reason: str) -> dict | None:
         return self.update(

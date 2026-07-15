@@ -3,13 +3,27 @@ from flask import Blueprint, request, g
 from app.services.registration_service import RegistrationService
 from app.services.race_project_service import RaceProjectService
 from app.services.race_service import RaceService
+from app.services.announcement_service import AnnouncementService
 from app.dao.race_dao import RaceDAO
+from app.dao.work_dao import WorkDAO
+from app.database import get_db
+from app.services.integrity_service import verify_resource_integrity
 from app.utils.auth import require_auth, require_role
-from app.utils.permissions import require_managed_race
+from app.utils.permissions import (
+    require_managed_race,
+    require_readonly,
+    check_managed_race,
+)
 from app.utils.errors import ValidationError
 from app.utils.response import success, created
 from app.utils.validation import validate
-from app.schemas import RaceCreateSchema, RaceEditSchema
+from app.schemas import (
+    RaceCreateSchema,
+    RaceEditSchema,
+    AnnouncementCreateSchema,
+    AnnouncementEditSchema,
+)
+from app.dao.announcement_dao import AnnouncementDAO
 
 organizer_bp = Blueprint("organizer", __name__)
 
@@ -17,6 +31,9 @@ reg_service = RegistrationService()
 race_dao = RaceDAO()
 race_project_service = RaceProjectService()
 race_service = RaceService()
+work_dao = WorkDAO()
+announcement_service = AnnouncementService()
+announcement_dao = AnnouncementDAO()
 
 
 # =============================================
@@ -177,3 +194,106 @@ def list_race_race_projects(race_id):
     """
     projects = race_project_service.list_for_organizer(race_id, g.current_user_id)
     return success(projects)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/works", methods=["GET"]
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+@require_readonly("work")
+def list_race_works(race_id):
+    return success(work_dao.find_submitted_by_race(race_id))
+
+
+@organizer_bp.route("/api/v1/organizer/works/<int:work_id>", methods=["GET"])
+@require_auth
+@require_role("organizer")
+def get_work(work_id):
+    row = get_db().execute(
+        """SELECT w.*, reg.race_id FROM works w
+           JOIN race_projects rp ON w.race_project_id = rp.id
+           JOIN registrations reg ON rp.registration_id = reg.id
+           WHERE w.id = ?""",
+        (work_id,),
+    ).fetchone()
+    if row is None:
+        from app.utils.errors import NotFoundError
+
+        raise NotFoundError("Work not found")
+    check_managed_race(row["race_id"], g.current_user_id)
+    result = dict(row)
+    result["integrity"] = verify_resource_integrity("work", work_id)
+    return success(result)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/announcements", methods=["POST"]
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+@validate(AnnouncementCreateSchema())
+def create_announcement(race_id):
+    announcement = announcement_service.create(
+        race_id, g.current_user_id, g.validated_body
+    )
+    return created(announcement)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/announcements", methods=["GET"]
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def list_announcements(race_id):
+    return success(announcement_dao.find_by_race(race_id))
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/announcements/<int:announcement_id>", methods=["PUT"]
+)
+@require_auth
+@require_role("organizer")
+@validate(AnnouncementEditSchema())
+def update_announcement(announcement_id):
+    return success(announcement_service.update(
+        announcement_id, g.current_user_id, g.validated_body
+    ))
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/announcements/<int:announcement_id>/publish",
+    methods=["POST"],
+)
+@require_auth
+@require_role("organizer")
+def publish_announcement(announcement_id):
+    return success(announcement_service.set_visibility(
+        announcement_id, g.current_user_id, "public"
+    ))
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/announcements/<int:announcement_id>/hide",
+    methods=["POST"],
+)
+@require_auth
+@require_role("organizer")
+def hide_announcement(announcement_id):
+    return success(announcement_service.set_visibility(
+        announcement_id, g.current_user_id, "private"
+    ))
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/announcements/<int:announcement_id>",
+    methods=["DELETE"],
+)
+@require_auth
+@require_role("organizer")
+def delete_announcement(announcement_id):
+    announcement_service.delete(announcement_id, g.current_user_id)
+    return success({"deleted": True})

@@ -162,11 +162,13 @@ def create_app(config_class=Config):
     from app.routes.auth import auth_bp
     from app.routes.rider import rider_bp
     from app.routes.organizer import organizer_bp
+    from app.routes.public import public_bp
     from app.routes.notification import notification_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(rider_bp)
     app.register_blueprint(organizer_bp)
+    app.register_blueprint(public_bp)
     app.register_blueprint(notification_bp)
 
     return app

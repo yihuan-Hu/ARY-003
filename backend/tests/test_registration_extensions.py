@@ -80,3 +80,36 @@ def test_registration_writes_audit_log(app, client, race_a, rider_a, rider_a_tok
 
     assert row is not None
     assert row["actor_user_id"] == rider_a["id"]
+
+
+def test_approve_with_existing_project_still_writes_audit_log(
+    app, client, race_a, rider_a_token, organizer_a_token
+):
+    registration = client.post(
+        f"/api/v1/rider/races/{race_a['id']}/registrations",
+        headers=_auth(rider_a_token),
+    ).get_json()["data"]
+
+    from app.database import get_db
+
+    with app.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO race_projects (registration_id) VALUES (?)",
+            (registration["id"],),
+        )
+        db.commit()
+
+    response = client.post(
+        f"/api/v1/organizer/registrations/{registration['id']}/approve",
+        headers=_auth(organizer_a_token),
+    )
+    assert response.status_code == 200
+
+    with app.app_context():
+        row = get_db().execute(
+            """SELECT * FROM audit_logs
+               WHERE action='registration.approve' AND target_id=?""",
+            (registration["id"],),
+        ).fetchone()
+    assert row is not None

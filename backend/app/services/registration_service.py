@@ -152,6 +152,7 @@ class RegistrationService:
 
         # === 事务边界：approve + 创建 RaceProject 必须原子 ===
         db = get_db()
+        audit_needed = False
         try:
             # IMMEDIATE 让并发审核串行化；进入事务后重新读取，避免使用陈旧状态。
             db.execute("BEGIN IMMEDIATE")
@@ -166,49 +167,44 @@ class RegistrationService:
                         registration_id,
                         commit=False,
                     )
-                db.commit()
-                return {
+                    audit_needed = True
+                result = {
                     "registration": reg,
                     "race_project": race_project,
                     "idempotent": True,
                 }
-
-            self._require_transition(reg["status"], self.STATUS_APPROVED)
-
-            updated_reg = self.dao.update_status(
-                registration_id,
-                self.STATUS_APPROVED,
-                reviewer_user_id,
-                commit=False,
-            )
-
-            existing_rp = self.race_project_dao.find_by_registration(registration_id)
-            if existing_rp:
-                db.commit()
-                return {
+            else:
+                self._require_transition(reg["status"], self.STATUS_APPROVED)
+                updated_reg = self.dao.update_status(
+                    registration_id,
+                    self.STATUS_APPROVED,
+                    reviewer_user_id,
+                    commit=False,
+                )
+                audit_needed = True
+                race_project = self.race_project_dao.find_by_registration(
+                    registration_id
+                )
+                idempotent = race_project is not None
+                if race_project is None:
+                    race_project = self.race_project_dao.create(
+                        registration_id,
+                        commit=False,
+                    )
+                result = {
                     "registration": updated_reg,
-                    "race_project": existing_rp,
-                    "idempotent": True,
+                    "race_project": race_project,
+                    "idempotent": idempotent,
                 }
-
-            race_project = self.race_project_dao.create(
-                registration_id,
-                commit=False,
-            )
-
             db.commit()
-            result = {
-                "registration": updated_reg,
-                "race_project": race_project,
-                "idempotent": False,
-            }
         except Exception:
             db.rollback()
             raise
-        audit_log(
-            "registration.approve", reviewer_user_id, "registration",
-            registration_id, "Registration approved",
-        )
+        if audit_needed:
+            audit_log(
+                "registration.approve", reviewer_user_id, "registration",
+                registration_id, "Registration approved",
+            )
         return result
 
     def reject_registration(self, registration_id: int, reviewer_user_id: int) -> dict:

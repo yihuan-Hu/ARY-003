@@ -164,3 +164,33 @@ def test_other_rider_cannot_edit_work(
     )
 
     assert response.status_code == 404
+
+
+def test_deleting_primary_work_clears_project_reference(
+    app, client, race_a, rider_a_token, organizer_a_token
+):
+    project = _approved_project(
+        client, race_a, rider_a_token, organizer_a_token
+    )
+    _advance(
+        client, organizer_a_token, race_a["id"], "start", "open-submissions"
+    )
+    work = _create_work(client, rider_a_token, project["id"])
+    client.post(
+        f"/api/v1/rider/works/{work['id']}/submit",
+        headers=_auth(rider_a_token),
+    )
+
+    response = client.delete(
+        f"/api/v1/rider/works/{work['id']}", headers=_auth(rider_a_token)
+    )
+    assert response.status_code == 200
+
+    from app.database import get_db
+
+    with app.app_context():
+        primary_work_id = get_db().execute(
+            "SELECT primary_work_id FROM race_projects WHERE id=?",
+            (project["id"],),
+        ).fetchone()["primary_work_id"]
+    assert primary_work_id is None

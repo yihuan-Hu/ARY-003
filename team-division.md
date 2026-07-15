@@ -326,7 +326,7 @@ CREATE TABLE works (
 - [ ] `GET /api/v1/organizer/races/<id>/works` — Organizer 查看作品列表 **只读**，需 `@require_managed_race` + `@require_readonly("work")`
   - 只返回 `work_status='submitted'` 的作品（草稿不进入评审池）
 - [ ] `GET /api/v1/organizer/works/<id>` — Organizer 查看单个作品详情（含完整描述、截图、视频、hash 链验证），需 `@require_managed_race`
-- [ ] `trg_works_sealed` 触发器：race 进入 judging 后，works 的 UPDATE/DELETE 被拒绝
+- [ ] `trg_works_sealed` 触发器：race 进入 judging 后，Rider 内容字段的 UPDATE 和作品 DELETE 被拒绝；C 的 `disqualified` / `disqualify_reason` 审核处置字段仍可更新
 
 ```sql
 CREATE TRIGGER trg_works_sealed
@@ -337,10 +337,26 @@ WHEN (
     JOIN races r ON reg.race_id = r.id
     WHERE rp.id = NEW.race_project_id
 ) IN ('judging', 'completed', 'archived')
+AND (
+    OLD.title IS NOT NEW.title OR OLD.description IS NOT NEW.description OR
+    OLD.repo_url IS NOT NEW.repo_url OR OLD.demo_url IS NOT NEW.demo_url OR
+    OLD.video_url IS NOT NEW.video_url OR
+    OLD.cover_image_url IS NOT NEW.cover_image_url OR
+    OLD.screenshot_urls IS NOT NEW.screenshot_urls OR
+    OLD.readme_body IS NOT NEW.readme_body OR
+    OLD.work_status IS NOT NEW.work_status OR
+    OLD.visibility IS NOT NEW.visibility OR
+    OLD.content_hash IS NOT NEW.content_hash OR
+    OLD.content_commitment IS NOT NEW.content_commitment OR
+    OLD.prev_hash IS NOT NEW.prev_hash OR OLD.version IS NOT NEW.version OR
+    OLD.submitted_at IS NOT NEW.submitted_at
+)
 BEGIN
     SELECT RAISE(ABORT, 'works are sealed once judging begins');
 END;
 ```
+
+另建 `BEFORE DELETE` 的 `trg_works_sealed_delete`，在相同 Race 状态下拒绝删除。审核处置不属于 Rider 内容修改，因此不受 UPDATE 触发器影响。
 
 - [ ] `GET /api/v1/public/works/<id>/integrity` — 公开验证端点，返回 hash 链验证结果 **无需认证**
 

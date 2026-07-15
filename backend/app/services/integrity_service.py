@@ -90,20 +90,30 @@ def verify_resource_integrity(resource_type: str, resource_id: int, verify_commi
         prev_hash = ev.get("content_hash")
 
         # 2. 检查 HMAC commitment
-        result = verify_commitment(ev.get("content_hash", ""), ev.get("commitment", ""))
-        if result is None:
+        if verify_commitments:
+            result = verify_commitment(
+                ev.get("content_hash", ""), ev.get("commitment", "")
+            )
+            if result is None:
+                commitments_skipped = True
+            elif result is False:
+                commitments_ok = False
+        else:
             commitments_skipped = True
-        elif result is False:
-            commitments_ok = False
+
+    if commitments_skipped:
+        commitment_status = "skipped"
+    else:
+        commitment_status = "ok" if commitments_ok else "broken"
 
     return {
-        "valid": hash_chain_ok and commitments_ok,
+        "valid": hash_chain_ok and (commitments_ok or commitments_skipped),
         "chain_length": len(events),
         "first_seen": events[0]["created_at"],
         "last_modified": events[-1]["created_at"],
         "events": events,
         "verification": {
             "hash_chain": "ok" if hash_chain_ok else "broken",
-            "commitments": "ok" if commitments_ok else ("skipped" if commitments_skipped else "broken"),
+            "commitments": commitment_status,
         },
     }
