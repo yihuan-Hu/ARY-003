@@ -200,6 +200,36 @@ def init_db(app=None):
         )
     """)
 
+    # works: B freezes this table first so C can build judging and exports.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS works (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_project_id INTEGER NOT NULL REFERENCES race_projects(id),
+            title TEXT NOT NULL,
+            description TEXT DEFAULT '',
+            repo_url TEXT DEFAULT '',
+            demo_url TEXT DEFAULT '',
+            video_url TEXT DEFAULT '',
+            cover_image_url TEXT DEFAULT '',
+            screenshot_urls TEXT DEFAULT '[]',
+            readme_body TEXT DEFAULT '',
+            work_status TEXT NOT NULL DEFAULT 'draft'
+                CHECK (work_status IN ('draft', 'submitted')),
+            visibility TEXT NOT NULL DEFAULT 'private'
+                CHECK (visibility IN ('private', 'public')),
+            content_hash TEXT DEFAULT '',
+            content_commitment TEXT DEFAULT '',
+            prev_hash TEXT,
+            version INTEGER NOT NULL DEFAULT 1,
+            submitted_at TEXT,
+            disqualified INTEGER NOT NULL DEFAULT 0
+                CHECK (disqualified IN (0, 1)),
+            disqualify_reason TEXT DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
     # =============================================
     # 新增：integrity_log（append-only 不可变）
     # =============================================

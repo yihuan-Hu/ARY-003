@@ -15,6 +15,7 @@
 | `ary-release-ops-plan.md` | 发布、监控、备份、值守和回滚要求。 |
 | `ary-ca-integration-spec.md` | CA 接入契约草案，定义参赛过程中 CAConnection 登记与握手、多 CAConnection、push / fetch 边界、骑行状态消息、Projection 输入和评审前风险提示。 |
 | `ux-hifi.taskbook.md` | UX-1 高保真原型任务书，定义视觉为主、体验为先的原型工作方式。 |
+| `b-upstream-contracts-for-cd.md` | 人员 B 冻结给 C/D 的第一批上游契约：`works` 表、`WorkDAO` 签名和 D 可依赖的 `RaceProjectDAO` 边界。 |
 | `registration-ca-rules-alignment.taskbook.md` | PRD-TEMP-1 临时任务书，承接报名、RaceProject 自动生成、CAConnection 动态接入和评审前风险提示的一致性整改。 |
 
 ## 阅读建议

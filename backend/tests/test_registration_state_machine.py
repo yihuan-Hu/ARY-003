@@ -345,7 +345,12 @@ def test_other_rider_cannot_distinguish_existing_registration_from_missing(
 
     assert existing_other.status_code == 404
     assert missing.status_code == 404
-    assert json.loads(existing_other.data)["error"] == json.loads(missing.data)["error"]
+    existing_error = json.loads(existing_other.data)["error"]
+    missing_error = json.loads(missing.data)["error"]
+    assert existing_error["code"] == missing_error["code"] == "NOT_FOUND"
+    assert existing_error["message"] == missing_error["message"]
+    assert existing_error["request_id"]
+    assert missing_error["request_id"]
 
 
 def test_other_rider_cannot_distinguish_existing_race_project_from_missing(
@@ -375,4 +380,9 @@ def test_other_rider_cannot_distinguish_existing_race_project_from_missing(
 
     assert existing_other.status_code == 404
     assert missing.status_code == 404
-    assert json.loads(existing_other.data)["error"] == json.loads(missing.data)["error"]
+    existing_error = json.loads(existing_other.data)["error"]
+    missing_error = json.loads(missing.data)["error"]
+    assert existing_error["code"] == missing_error["code"] == "NOT_FOUND"
+    assert existing_error["message"] == missing_error["message"]
+    assert existing_error["request_id"]
+    assert missing_error["request_id"]
