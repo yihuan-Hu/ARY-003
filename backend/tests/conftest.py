@@ -1,17 +1,34 @@
+import os
+import tempfile
+
 import pytest
 import json
 
 from app import create_app
 from app.config import TestConfig
-from app.database import reset_db, get_db
+from app.database import get_db
 from app.utils.auth import hash_password
 
 
 @pytest.fixture
 def app():
+    """每个测试独立的临时数据库文件，测试结束后清理"""
+    fd, db_path = tempfile.mkstemp(suffix=".db", prefix="ary_test_")
+    os.close(fd)
+    os.unlink(db_path)
+    TestConfig.DATABASE_PATH = db_path
     app = create_app(TestConfig)
-    reset_db(app)
     yield app
+    # 关闭连接后清理
+    with app.app_context():
+        db = get_db()
+        db.close()
+    try:
+        os.unlink(db_path)
+        os.unlink(db_path + "-wal")
+        os.unlink(db_path + "-shm")
+    except OSError:
+        pass
 
 
 @pytest.fixture

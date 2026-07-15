@@ -265,6 +265,29 @@ def init_db(app=None):
         END
     """)
 
+    # =============================================
+    # 新增：token_blacklist（logout 持久化）
+    # =============================================
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS token_blacklist (
+            jti TEXT PRIMARY KEY,
+            expires_at TEXT NOT NULL
+        )
+    """)
+
+    # =============================================
+    # 新增：login_rate_limit（限流持久化）
+    # =============================================
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS login_rate_limit (
+            key TEXT PRIMARY KEY,
+            key_type TEXT NOT NULL CHECK(key_type IN ('ip', 'account')),
+            failure_count INTEGER NOT NULL DEFAULT 0,
+            locked_until TEXT,
+            window_start TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
     conn.commit()
 
     # ---- 种子用户（随机密码，打印到控制台） ----

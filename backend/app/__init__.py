@@ -34,6 +34,9 @@ def create_app(config_class=Config):
     # 数据库
     with app.app_context():
         init_db(app)
+        # 启动时从 DB 恢复 token 黑名单（logout 持久化）
+        from app.utils.auth import _load_blacklist_from_db
+        _load_blacklist_from_db()
 
     app.teardown_appcontext(close_db)
 

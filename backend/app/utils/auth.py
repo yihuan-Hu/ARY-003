@@ -22,8 +22,8 @@ from flask import current_app, g, request
 
 from app.utils.errors import UnauthorizedError, ForbiddenError, ValidationError
 
-# ---- Token 黑名单（内存，logout 用） ----
-_token_blacklist: dict[str, float] = {}
+# ---- Token 黑名单（内存缓存 + SQLite 持久化） ----
+_token_blacklist: dict[str, float] = {}  # 内存缓存，重启后从 DB 恢复
 
 # ---- 密码复杂度校验 ----
 
@@ -132,28 +132,70 @@ def decode_token(token: str) -> dict:
 
 
 def revoke_token(token: str) -> None:
-    """将 access token 加入黑名单"""
+    """将 access token 加入黑名单（内存 + SQLite 持久化）"""
     try:
         payload = jwt.decode(
             token,
             current_app.config["SECRET_KEY"],
             algorithms=[current_app.config["JWT_ALGORITHM"]],
-            options={"verify_exp": False},  # 即使已过期也记录
+            options={"verify_exp": False},
         )
         jti = payload.get("jti")
         exp = payload.get("exp", 0)
         if jti:
             _token_blacklist[jti] = exp
+            # 持久化到 SQLite
+            try:
+                from app.database import get_db as _get_db
+                db = _get_db()
+                db.execute(
+                    "INSERT OR REPLACE INTO token_blacklist (jti, expires_at) VALUES (?, datetime(?, 'unixepoch'))",
+                    (jti, exp),
+                )
+                db.commit()
+            except Exception:
+                pass  # DB 写入失败不影响 logout 核心功能（内存已有）
     except jwt.InvalidTokenError:
-        pass  # 无效 token 静默忽略
+        pass
+
+
+def _load_blacklist_from_db() -> None:
+    """启动时从 SQLite 恢复未过期的黑名单"""
+    try:
+        from app.database import get_db as _get_db
+        db = _get_db()
+        rows = db.execute(
+            "SELECT jti, expires_at FROM token_blacklist WHERE expires_at > datetime('now')"
+        ).fetchall()
+        now = time.time()
+        for row in rows:
+            from datetime import datetime as _dt
+            try:
+                exp_ts = _dt.fromisoformat(row["expires_at"]).timestamp()
+                _token_blacklist[row["jti"]] = exp_ts
+            except (ValueError, OSError):
+                pass
+        # 清理过期条目
+        db.execute("DELETE FROM token_blacklist WHERE expires_at <= datetime('now')")
+        db.commit()
+    except Exception:
+        pass  # 表不存在等情况，内存模式降级
 
 
 def _cleanup_blacklist() -> None:
-    """清理已过期的黑名单条目"""
+    """清理已过期的黑名单条目（内存 + DB）"""
     now = time.time()
     expired = [jti for jti, exp in _token_blacklist.items() if exp < now]
     for jti in expired:
         del _token_blacklist[jti]
+    if expired:
+        try:
+            from app.database import get_db as _get_db
+            db = _get_db()
+            db.execute("DELETE FROM token_blacklist WHERE expires_at <= datetime('now')")
+            db.commit()
+        except Exception:
+            pass
 
 
 # ---- 装饰器 ----

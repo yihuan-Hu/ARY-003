@@ -85,6 +85,13 @@ def audit_log(action: str, actor_user_id: int, target_type: str,
             ),
         )
         db.commit()
-    except Exception:
-        # 审计日志写入失败不应阻断主业务流程
-        pass
+    except Exception as exc:
+        # 审计日志写入失败不应阻断主业务流程，但必须输出到 stderr 供运维发现
+        import sys
+        import traceback
+        print(
+            f"[ARY] AUDIT_LOG_FAILED: action={action} target={target_type}/{target_id} "
+            f"error={exc}",
+            file=sys.stderr,
+        )
+        traceback.print_exc(file=sys.stderr)
