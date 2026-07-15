@@ -1,4 +1,8 @@
+import re
 from datetime import datetime, timezone
+
+# 白名单正则：只允许字母数字下划线
+_VALID_IDENTIFIER = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 
 
 def now():
@@ -6,6 +10,9 @@ def now():
 
 
 def next_id(conn, table, prefix):
+    # 安全校验：table 只允许字母数字下划线
+    if not _VALID_IDENTIFIER.match(table):
+        raise ValueError(f"Invalid table name: {table}")
     row = conn.execute(
         f'SELECT id FROM {table} WHERE id LIKE ? ORDER BY id DESC LIMIT 1',
         (f'{prefix}_%',),

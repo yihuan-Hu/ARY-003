@@ -5,7 +5,7 @@ from app.database import get_db
 class UserDAO:
     def create(self, username: str, password_hash: str, roles: list[str] = None) -> dict:
         db = get_db()
-        roles_json = json.dumps(roles or ["contestant"])
+        roles_json = json.dumps(roles or ["rider"])
         cursor = db.execute(
             "INSERT INTO users (username, password_hash, roles) VALUES (?, ?, ?)",
             (username, password_hash, roles_json),
@@ -38,8 +38,21 @@ class UserDAO:
         db.commit()
         return self.find_by_id(user_id)
 
+    def update(self, user_id: int, **kwargs) -> dict | None:
+        db = get_db()
+        if not kwargs:
+            return self.find_by_id(user_id)
+        sets = ", ".join(f"{k} = ?" for k in kwargs)
+        values = tuple(kwargs.values()) + (user_id,)
+        db.execute(
+            f"UPDATE users SET {sets}, updated_at = datetime('now') WHERE id = ?",
+            values,
+        )
+        db.commit()
+        return self.find_by_id(user_id)
+
     def get_roles(self, user: dict) -> list[str]:
-        raw = user.get("roles", '["contestant"]')
+        raw = user.get("roles", '["rider"]')
         if isinstance(raw, str):
-            return json.loads(raw) if raw else ["contestant"]
-        return raw if isinstance(raw, list) else ["contestant"]
+            return json.loads(raw) if raw else ["rider"]
+        return raw if isinstance(raw, list) else ["rider"]

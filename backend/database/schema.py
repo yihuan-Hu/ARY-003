@@ -1,13 +1,23 @@
+import re
 from .connection import get_db
+
+# 白名单正则
+_VALID_IDENTIFIER = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
 
 
 def table_columns(conn, table):
+    if not _VALID_IDENTIFIER.match(table):
+        raise ValueError(f"Invalid table name: {table}")
     return {row['name'] for row in conn.execute(f'PRAGMA table_info({table})')}
 
 
 def add_column_if_missing(conn, table, column, ddl):
+    if not _VALID_IDENTIFIER.match(table):
+        raise ValueError(f"Invalid table name: {table}")
+    if not _VALID_IDENTIFIER.match(column):
+        raise ValueError(f"Invalid column name: {column}")
     if column not in table_columns(conn, table):
-        conn.execute(f'ALTER TABLE {table} ADD COLUMN {ddl}')
+        conn.execute(f'ALTER TABLE {table} ADD COLUMN {column} {ddl}')
 
 
 def init_db():

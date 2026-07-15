@@ -10,13 +10,13 @@ import pytest
 
 def test_login_success(client, rider_a):
     resp = client.post("/api/v1/auth/login",
-                       data=json.dumps({"username": "rider_a", "password": "rider123"}),
+                       data=json.dumps({"username": "rider_a", "password": "Rider123!"}),
                        content_type="application/json")
     assert resp.status_code == 200
     data = json.loads(resp.data)
     assert "token" in data["data"]
     assert data["data"]["user"]["username"] == "rider_a"
-    assert "contestant" in data["data"]["user"]["roles"]
+    assert "rider" in data["data"]["user"]["roles"]
 
 
 def test_login_fail_wrong_password(client, rider_a):
@@ -216,7 +216,7 @@ def test_rider_cannot_view_others_registration(client, rider_b_token, race_a, ri
 def test_organizer_cannot_review_other_race(client, rider_a_token, race_a, organizer_b_token, rider_b):
     """Organizer B 不能审核不属于自己的 Race 的报名"""
     # Rider B 报名到 Race A（由 Organizer A 创建）
-    # 先让 Rider B 也是 contestant
+    # 先让 Rider B 也是 rider
     submit_resp = client.post(
         f"/api/v1/rider/races/{race_a['id']}/registrations",
         headers={"Authorization": f"Bearer {rider_a_token}"}

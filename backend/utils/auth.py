@@ -1,3 +1,14 @@
+"""
+!!! DEPRECATED — 人员 A 已迁移所有新代码到 app.utils.auth !!!
+
+旧层认证模块。请勿在新代码中引用。
+新代码请使用: from app.utils.auth import require_auth, require_role, require_any_role
+
+此文件将在旧路由迁移完成后由 人员 D 删除。
+"""
+import warnings
+warnings.warn("backend/utils/auth.py is deprecated. Use app.utils.auth instead.", DeprecationWarning, stacklevel=2)
+
 import base64
 import hashlib
 import hmac

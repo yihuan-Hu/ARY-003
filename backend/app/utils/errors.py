@@ -52,14 +52,22 @@ class ValidationError(AppError):
     message = "Validation failed"
 
 
+class RateLimitError(AppError):
+    status_code = 429
+    error_code = "RATE_LIMITED"
+    message = "Too many requests"
+
+
 def register_error_handlers(app):
     @app.errorhandler(AppError)
     def handle_app_error(error):
+        from flask import g
         return (
             jsonify({
                 "error": {
                     "code": error.error_code,
                     "message": error.message,
+                    "request_id": getattr(g, "request_id", "unknown"),
                 }
             }),
             error.status_code,
@@ -67,11 +75,13 @@ def register_error_handlers(app):
 
     @app.errorhandler(404)
     def handle_404(error):
+        from flask import g
         return (
             jsonify({
                 "error": {
                     "code": "NOT_FOUND",
                     "message": "The requested URL was not found on the server.",
+                    "request_id": getattr(g, "request_id", "unknown"),
                 }
             }),
             404,
@@ -79,11 +89,15 @@ def register_error_handlers(app):
 
     @app.errorhandler(500)
     def handle_500(error):
+        import traceback
+        from flask import g
+        app.logger.error(f"[500] request_id={getattr(g, 'request_id', 'unknown')}\n{traceback.format_exc()}")
         return (
             jsonify({
                 "error": {
                     "code": "INTERNAL_ERROR",
                     "message": "Internal server error",
+                    "request_id": getattr(g, "request_id", "unknown"),
                 }
             }),
             500,

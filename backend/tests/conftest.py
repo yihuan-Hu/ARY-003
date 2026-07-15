@@ -68,52 +68,52 @@ def _create_user(app, username, password, roles):
 
 @pytest.fixture
 def admin_user(app):
-    return _create_user(app, "admin", "admin123", ["admin", "organizer"])
+    return _create_user(app, "admin", "Admin123!", ["admin", "organizer"])
 
 
 @pytest.fixture
 def admin_token(client, admin_user):
-    return _login(client, "admin", "admin123")
+    return _login(client, "admin", "Admin123!")
 
 
 @pytest.fixture
 def organizer_a(app):
-    return _create_user(app, "organizer_a", "org123", ["organizer"])
+    return _create_user(app, "organizer_a", "Organizer123!", ["organizer"])
 
 
 @pytest.fixture
 def organizer_a_token(client, organizer_a):
-    return _login(client, "organizer_a", "org123")
+    return _login(client, "organizer_a", "Organizer123!")
 
 
 @pytest.fixture
 def organizer_b(app):
-    return _create_user(app, "organizer_b", "org123", ["organizer"])
+    return _create_user(app, "organizer_b", "Organizer123!", ["organizer"])
 
 
 @pytest.fixture
 def organizer_b_token(client, organizer_b):
-    return _login(client, "organizer_b", "org123")
+    return _login(client, "organizer_b", "Organizer123!")
 
 
 @pytest.fixture
 def rider_a(app):
-    return _create_user(app, "rider_a", "rider123", ["contestant"])
+    return _create_user(app, "rider_a", "Rider123!", ["rider"])
 
 
 @pytest.fixture
 def rider_a_token(client, rider_a):
-    return _login(client, "rider_a", "rider123")
+    return _login(client, "rider_a", "Rider123!")
 
 
 @pytest.fixture
 def rider_b(app):
-    return _create_user(app, "rider_b", "rider123", ["contestant"])
+    return _create_user(app, "rider_b", "Rider123!", ["rider"])
 
 
 @pytest.fixture
 def rider_b_token(client, rider_b):
-    return _login(client, "rider_b", "rider123")
+    return _login(client, "rider_b", "Rider123!")
 
 
 # =============================================

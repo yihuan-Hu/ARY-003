@@ -13,6 +13,7 @@
 * **角色 2 已交付**：可复用权限策略模块（own/managed_race 装饰器）、Rider withdraw 路由、13 项新增越权/权限单元测试、旧 21 测试兼容隔离。52 项测试全部通过（31 新 + 21 旧）。
 * **角色 3 已交付并完成两轮评测整改**：Registration DAO / Service / Route 与显式状态机完成；approve / reject / submit / withdraw 均具备受控事务边界和事务内重读；重复报名稳定返回 409，Rider 非自有 Registration / RaceProject 与不存在资源统一返回 404；详情查询已去重、DAO 死代码已移除；14 项专项测试、既定隔离回归 66 项全部通过。
 * **角色 4 已交付**：RaceProjectService 层、Route 重构（含 CAConnection[]/Work 占位字段）、Demo 脚本（17/17 步骤通过）、兼容性分析文档（旧 /api/entries 与 Jumbotron 不与 RaceProject API 混淆）。52 项回归测试全部通过。
+* **人员 A（认证与安全基座）已交付**：接口契约冻结、密码哈希升级（PBKDF2 随机盐 60 万次 + 常量时间比较 + 复杂度校验）、SECRET_KEY/SUBMISSION_SECRET/CORS_ORIGINS 强制环境变量、安全中间件（6 个安全响应头 + Content-Type 强制 + 请求体 1MB 限制 + request_id）、登录限流（IP + 账号双重限流 + 429）、认证统一（refresh/logout/profile 端点 + Token 黑名单 + DeprecationWarning 标记旧层）、BaseDAO 基类（find_by_id/find_all/create/update/delete/count/paginate）、marshmallow @validate 装饰器、结构化日志 + 审计日志（audit_logs 表 append-only 不可变触发器）、完整性保护基础设施（integrity_log 表 + verify_resource_integrity + require_own_work + require_readonly + 跨赛事主办方隔离）。bandit 安全扫描零告警。52 项回归测试全部通过（31 新 + 21 旧）。
 
 ## 任务看板
 

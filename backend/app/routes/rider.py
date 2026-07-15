@@ -18,7 +18,7 @@ race_project_service = RaceProjectService()
 
 @rider_bp.route("/api/v1/rider/races/<int:race_id>/registrations", methods=["POST"])
 @require_auth
-@require_role("contestant")
+@require_role("rider")
 def submit_registration(race_id):
     registration = reg_service.submit(race_id, g.current_user_id)
     return created(registration)
@@ -26,7 +26,7 @@ def submit_registration(race_id):
 
 @rider_bp.route("/api/v1/rider/registrations", methods=["GET"])
 @require_auth
-@require_role("contestant")
+@require_role("rider")
 def list_my_registrations():
     registrations = reg_service.list_for_rider(g.current_user_id)
     return success(registrations)
@@ -34,7 +34,7 @@ def list_my_registrations():
 
 @rider_bp.route("/api/v1/rider/registrations/<int:registration_id>", methods=["GET"])
 @require_auth
-@require_role("contestant")
+@require_role("rider")
 @require_own_registration()
 def get_my_registration(registration_id):
     """Rider 查看自己的报名（装饰器已校验归属，存入 g.current_registration）"""
@@ -43,7 +43,7 @@ def get_my_registration(registration_id):
 
 @rider_bp.route("/api/v1/rider/registrations/<int:registration_id>/withdraw", methods=["POST"])
 @require_auth
-@require_role("contestant")
+@require_role("rider")
 @require_own_registration()
 def withdraw_registration(registration_id):
     """Rider 退赛（装饰器已校验归属）"""
@@ -57,7 +57,7 @@ def withdraw_registration(registration_id):
 
 @rider_bp.route("/api/v1/rider/race-projects/<int:race_project_id>", methods=["GET"])
 @require_auth
-@require_role("contestant")
+@require_role("rider")
 @require_own_race_project()
 def get_my_race_project(race_project_id):
     """Rider 查看自己的 RaceProject（装饰器已校验归属链，存入 g.current_race_project）

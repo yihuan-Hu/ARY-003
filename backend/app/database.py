@@ -1,8 +1,22 @@
-import sqlite3
 import os
+import re
+import secrets
+import sqlite3
+
 from flask import g, current_app
 from app.config import Config
 
+
+# ---- 白名单正则：只允许字母数字下划线，防止 table/column 注入 ----
+_VALID_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+
+def _validate_identifier(name: str, context: str) -> None:
+    if not _VALID_IDENTIFIER.match(name):
+        raise ValueError(f"Invalid identifier '{name}' in {context}")
+
+
+# ---- 数据库连接 ----
 
 def get_db() -> sqlite3.Connection:
     if "db" not in g:
@@ -22,8 +36,21 @@ def close_db(e=None):
         db.close()
 
 
+# ---- 安全补列（白名单校验版） ----
+
+def _add_column_if_missing(cursor, table: str, column: str, col_def: str):
+    """安全补列——table 和 column 经白名单校验后才拼接"""
+    _validate_identifier(table, "ALTER TABLE")
+    _validate_identifier(column, "ADD COLUMN")
+    cursor.execute(f"PRAGMA table_info({table})")
+    existing = {row[1] for row in cursor.fetchall()}
+    if column not in existing:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
+
+
+# ---- 数据库初始化 ----
+
 def init_db(app=None):
-    """初始化数据库：建表 + migration"""
     db_path = Config.DATABASE_PATH if app is None else app.config.get("DATABASE_PATH", Config.DATABASE_PATH)
     db_path = os.path.abspath(db_path)
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
@@ -35,7 +62,7 @@ def init_db(app=None):
     cursor = conn.cursor()
 
     # =============================================
-    # 旧表（保留兼容，不修改结构）
+    # 旧表（保留兼容）
     # =============================================
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS races (
@@ -127,16 +154,23 @@ def init_db(app=None):
     # 新表（ARY MVP Checkpoint 1）
     # =============================================
 
-    # 为 users 表补充新字段（如果旧表缺列）
-    _add_column_if_missing(cursor, "users", "roles", "TEXT NOT NULL DEFAULT '[\"contestant\"]'")
+    # users 补充新字段
+    _add_column_if_missing(cursor, "users", "roles", "TEXT NOT NULL DEFAULT '[\"rider\"]'")
     _add_column_if_missing(cursor, "users", "github_user_id", "TEXT")
     _add_column_if_missing(cursor, "users", "github_login", "TEXT")
     _add_column_if_missing(cursor, "users", "profile_completed", "INTEGER DEFAULT 0")
+    _add_column_if_missing(cursor, "users", "display_name", "TEXT DEFAULT ''")
+    _add_column_if_missing(cursor, "users", "school_org", "TEXT DEFAULT ''")
+    _add_column_if_missing(cursor, "users", "bio", "TEXT DEFAULT ''")
 
-    # 为 races 表补充 created_by_user_id
+    # races 补充 organizer 关系
     _add_column_if_missing(cursor, "races", "created_by_user_id", "INTEGER REFERENCES users(id)")
+    _add_column_if_missing(cursor, "races", "theme", "TEXT DEFAULT ''")
+    _add_column_if_missing(cursor, "races", "organizer_name", "TEXT DEFAULT ''")
+    _add_column_if_missing(cursor, "races", "start_time", "TEXT")
+    _add_column_if_missing(cursor, "races", "end_time", "TEXT")
 
-    # registrations 表
+    # registrations
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS registrations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,34 +187,152 @@ def init_db(app=None):
         )
     """)
 
-    # race_projects 表
+    # race_projects
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS race_projects (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             registration_id INTEGER NOT NULL UNIQUE REFERENCES registrations(id),
             aggregate_ingestion_status TEXT NOT NULL DEFAULT 'not_configured',
             connection_health TEXT NOT NULL DEFAULT 'no_signal',
+            primary_work_id INTEGER,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
 
+    # =============================================
+    # 新增：integrity_log（append-only 不可变）
+    # =============================================
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS integrity_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL,
+            resource_type TEXT NOT NULL,
+            resource_id INTEGER NOT NULL,
+            actor_user_id INTEGER NOT NULL,
+            content_hash TEXT NOT NULL,
+            prev_hash TEXT,
+            commitment TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_integrity_log_immutable
+        BEFORE UPDATE ON integrity_log
+        BEGIN
+            SELECT RAISE(ABORT, 'integrity_log is append-only');
+        END
+    """)
+
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_integrity_log_no_delete
+        BEFORE DELETE ON integrity_log
+        BEGIN
+            SELECT RAISE(ABORT, 'integrity_log records cannot be deleted');
+        END
+    """)
+
+    # =============================================
+    # 新增：audit_logs（append-only 不可变）
+    # =============================================
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS audit_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            action TEXT NOT NULL,
+            actor_user_id INTEGER NOT NULL,
+            target_type TEXT NOT NULL,
+            target_id INTEGER,
+            detail TEXT DEFAULT '',
+            request_id TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_audit_logs_immutable
+        BEFORE UPDATE ON audit_logs
+        BEGIN
+            SELECT RAISE(ABORT, 'audit_logs is append-only');
+        END
+    """)
+
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_audit_logs_no_delete
+        BEFORE DELETE ON audit_logs
+        BEGIN
+            SELECT RAISE(ABORT, 'audit_logs records cannot be deleted');
+        END
+    """)
+
     conn.commit()
+
+    # ---- 种子用户（随机密码，打印到控制台） ----
+    seed_default_users(conn)
+
     conn.close()
 
 
-def _add_column_if_missing(cursor, table, column, col_def):
-    """安全补列：如果列不存在则 ALTER TABLE ADD COLUMN"""
-    cursor.execute(f"PRAGMA table_info({table})")
-    existing = {row[1] for row in cursor.fetchall()}
-    if column not in existing:
-        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
+# ---- 种子用户（启动时随机生成密码） ----
 
+def seed_default_users(conn):
+    """不检查是否已有用户——每次 init_db 都确保三账号存在；密码首次随机生成并打印。"""
+    from app.utils.auth import hash_password
+
+    defaults = [
+        ("rider", ["rider"]),
+        ("organizer", ["organizer"]),
+        ("admin", ["admin", "organizer"]),
+    ]
+
+    import json as _json
+
+    for username, roles in defaults:
+        existing = conn.execute(
+            "SELECT id, password_hash FROM users WHERE username = ?", (username,)
+        ).fetchone()
+
+        if existing:
+            # 已有用户：保留已设密码，只确保 roles 字段是最新的
+            conn.execute(
+                "UPDATE users SET roles = ? WHERE username = ? AND (roles IS NULL OR roles = '')",
+                (_json.dumps(roles), username),
+            )
+        else:
+            # 生成满足复杂度要求的随机密码：大写+小写+数字+特殊字符
+            import string
+            alphabet = string.ascii_letters + string.digits
+            password = (
+                secrets.choice(string.ascii_uppercase)
+                + secrets.choice(string.ascii_lowercase)
+                + secrets.choice(string.digits)
+                + ''.join(secrets.choice(alphabet) for _ in range(9))
+            )
+            pw_hash = hash_password(password)
+            conn.execute(
+                "INSERT INTO users (username, password_hash, roles) VALUES (?, ?, ?)",
+                (username, pw_hash, _json.dumps(roles)),
+            )
+            print(f"[ARY] Created user '{username}' with password: {password}")
+
+    conn.commit()
+
+
+# =============================================
+# 测试用 reset
+# =============================================
 
 def reset_db(app=None):
-    """仅测试用：删除并重建数据库"""
+    """仅测试用：关闭所有连接后删除并重建数据库"""
+    from flask import g as flask_g
     db_path = Config.DATABASE_PATH if app is None else app.config.get("DATABASE_PATH", Config.DATABASE_PATH)
     db_path = os.path.abspath(db_path)
+    # 关闭 Flask g 中的连接
+    if app:
+        with app.app_context():
+            db = flask_g.pop("db", None)
+            if db is not None:
+                db.close()
     if os.path.exists(db_path):
         os.remove(db_path)
     init_db(app)
