@@ -13,7 +13,7 @@
 * **角色 2 已交付**：可复用权限策略模块（own/managed_race 装饰器）、Rider withdraw 路由、13 项新增越权/权限单元测试、旧 21 测试兼容隔离。52 项测试全部通过（31 新 + 21 旧）。
 * **角色 3 已交付并完成两轮评测整改**：Registration DAO / Service / Route 与显式状态机完成；approve / reject / submit / withdraw 均具备受控事务边界和事务内重读；重复报名稳定返回 409，Rider 非自有 Registration / RaceProject 与不存在资源统一返回 404；详情查询已去重、DAO 死代码已移除；14 项专项测试、既定隔离回归 66 项全部通过。
 * **角色 4 已交付**：RaceProjectService 层、Route 重构（含 CAConnection[]/Work 占位字段）、Demo 脚本（17/17 步骤通过）、兼容性分析文档（旧 /api/entries 与 Jumbotron 不与 RaceProject API 混淆）。52 项回归测试全部通过。
-* **人员 A（认证与安全基座）已交付**：接口契约冻结、密码哈希升级（PBKDF2 随机盐 60 万次 + 常量时间比较 + 复杂度校验）、SECRET_KEY/SUBMISSION_SECRET/CORS_ORIGINS 强制环境变量、安全中间件（6 个安全响应头 + Content-Type 强制 + 请求体 1MB 限制 + request_id）、登录限流（IP + 账号双重限流 + 429）、认证统一（refresh/logout/profile 端点 + Token 黑名单 + DeprecationWarning 标记旧层）、BaseDAO 基类（find_by_id/find_all/create/update/delete/count/paginate）、marshmallow @validate 装饰器、结构化日志 + 审计日志（audit_logs 表 append-only 不可变触发器）、完整性保护基础设施（integrity_log 表 + verify_resource_integrity + require_own_work + require_readonly + 跨赛事主办方隔离）。bandit 安全扫描零告警。52 项回归测试全部通过（31 新 + 21 旧）。
+* **人员 A（认证与安全基座）已交付**：接口契约冻结、密码哈希升级（PBKDF2 随机盐 60 万次 + 常量时间比较 + 复杂度校验）、SECRET_KEY/SUBMISSION_SECRET/CORS_ORIGINS 强制环境变量、安全中间件（6 个安全响应头 + CSRF X-CSRF-Token + HSTS + Content-Type 强制 + 请求体 1MB 限制 + request_id）、登录限流（IP + 账号双层限流 + 429 + SQLite 持久化）、认证统一（refresh/logout/profile 端点 + Token 黑名单 SQLite 持久化 + DeprecationWarning 标记旧层）、BaseDAO 基类（order_by/columns 白名单校验）、marshmallow @validate 装饰器、结构化日志 + 审计日志（audit_logs 表 append-only 不可变 + stderr 降级输出）、完整性保护（integrity_log 表 + verify_resource_integrity 含 HMAC commitment 验证 + require_own_work + require_readonly + 跨赛事隔离）、健康检查 /health + /health/ready。bandit 零告警。require.md §16 12 项审计发现全部修复（10/12 已清零，2 项属其他角色）。52 项回归测试全部通过。
 
 ## 任务看板
 
@@ -76,6 +76,10 @@
 | UX-1 品牌区 logo 已替换为马头罗盘 PNG，生成透明底裁切版并按竖向比例调整 Header 图标容器 | `design-prototype/assets/logo-horse-compass-transparent.png`、`design-prototype/index.html`、`design-prototype/styles.css` |
 | UX-1 首页设计与交互短视频已录制，覆盖默认首页、Live Race 切换、右侧 Drawer 打开 / 收起，并内嵌字幕说明 | `design-prototype/recordings/ary-homepage-demo.mp4` |
 | UX-1 首页整改经验已沉淀为通用高保真页面工作流 Skill，并在任务书和原型 README 中引用；后续页面需先审 IA、补领域样例数据、复用已通过页面视觉 / 交互惯例，再浏览器复审 | `.agents/skills/hifi-ui-page-workflow/SKILL.md`、`docs/ux-hifi.taskbook.md`、`design-prototype/README.md` |
+| 人员 A 接口契约已冻结：装饰器签名 / BaseDAO / 错误码 / g 对象 / 环境变量 | `docs/contracts.md` |
+| 人员 A 安全加固：BaseDAO order_by/columns 白名单 + audit_log stderr + integrity HMAC 验证 + token/限流 SQLite 持久化 | `backend/app/dao/base.py`、`backend/app/utils/logging.py`、`backend/app/utils/rate_limit.py`、`backend/app/utils/auth.py`、`backend/app/services/integrity_service.py`、`backend/app/database.py` |
+| 人员 A require.md §16 审计发现：12 项中 10 项已清零，2 项属其他角色（CSV #7 → C，旧层删除 #8 → D） | `require.md`、bandit 零告警 |
+| 人员 A CSRF + HSTS + /health + /health/ready + 角色值 r→r 全局对齐 | `backend/app/__init__.py` |
 
 ## 风险与阻塞
 
