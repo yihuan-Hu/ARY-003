@@ -318,6 +318,21 @@ def init_db(app=None):
         )
     """)
 
+    # =============================================
+    # 新增：notifications（系统内通知）
+    # =============================================
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS notifications (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipient_user_id INTEGER NOT NULL REFERENCES users(id),
+            title TEXT NOT NULL,
+            body TEXT DEFAULT '',
+            link TEXT DEFAULT '',
+            is_read INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
     conn.commit()
 
     # ---- 种子用户（随机密码，打印到控制台） ----
