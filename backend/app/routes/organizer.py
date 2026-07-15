@@ -2,17 +2,21 @@ from flask import Blueprint, request, g
 
 from app.services.registration_service import RegistrationService
 from app.services.race_project_service import RaceProjectService
+from app.services.race_service import RaceService
 from app.dao.race_dao import RaceDAO
 from app.utils.auth import require_auth, require_role
 from app.utils.permissions import require_managed_race
 from app.utils.errors import ValidationError
 from app.utils.response import success, created
+from app.utils.validation import validate
+from app.schemas import RaceCreateSchema, RaceEditSchema
 
 organizer_bp = Blueprint("organizer", __name__)
 
 reg_service = RegistrationService()
 race_dao = RaceDAO()
 race_project_service = RaceProjectService()
+race_service = RaceService()
 
 
 # =============================================
@@ -22,18 +26,9 @@ race_project_service = RaceProjectService()
 @organizer_bp.route("/api/v1/organizer/races", methods=["POST"])
 @require_auth
 @require_role("organizer")
+@validate(RaceCreateSchema())
 def create_race():
-    body = request.get_json(silent=True) or {}
-    name = body.get("name", "").strip()
-    if not name:
-        raise ValidationError("Race name is required")
-    race = race_dao.create(
-        name=name,
-        created_by_user_id=g.current_user_id,
-        slug=body.get("slug", name.lower().replace(" ", "-")),
-        status=body.get("status", "upcoming"),
-        description=body.get("description", ""),
-    )
+    race = race_service.create(g.current_user_id, g.validated_body)
     return created(race)
 
 
@@ -41,8 +36,90 @@ def create_race():
 @require_auth
 @require_role("organizer")
 def list_my_races():
-    races = race_dao.find_by_organizer(g.current_user_id)
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = min(100, max(1, int(request.args.get("per_page", 20))))
+    except ValueError as error:
+        raise ValidationError("page and per_page must be integers") from error
+    races = race_dao.paginate_by_organizer(g.current_user_id, page, per_page)
     return success(races)
+
+
+@organizer_bp.route("/api/v1/organizer/races/<int:race_id>", methods=["GET"])
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def get_race(race_id):
+    return success(g.current_race)
+
+
+@organizer_bp.route("/api/v1/organizer/races/<int:race_id>", methods=["PUT"])
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+@validate(RaceEditSchema())
+def edit_race(race_id):
+    return success(race_service.edit(race_id, g.current_user_id, g.validated_body))
+
+
+def _transition_race(race_id, target_status):
+    return success(race_service.transition(race_id, target_status, g.current_user_id))
+
+
+@organizer_bp.route("/api/v1/organizer/races/<int:race_id>/publish", methods=["POST"])
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def publish_race(race_id):
+    return _transition_race(race_id, "published")
+
+
+@organizer_bp.route("/api/v1/organizer/races/<int:race_id>/open-registration", methods=["POST"])
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def open_registration(race_id):
+    return _transition_race(race_id, "registration")
+
+
+@organizer_bp.route("/api/v1/organizer/races/<int:race_id>/start", methods=["POST"])
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def start_race(race_id):
+    return _transition_race(race_id, "running")
+
+
+@organizer_bp.route("/api/v1/organizer/races/<int:race_id>/open-submissions", methods=["POST"])
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def open_submissions(race_id):
+    return _transition_race(race_id, "submitting")
+
+
+@organizer_bp.route("/api/v1/organizer/races/<int:race_id>/start-judging", methods=["POST"])
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def start_judging(race_id):
+    return _transition_race(race_id, "judging")
+
+
+@organizer_bp.route("/api/v1/organizer/races/<int:race_id>/complete", methods=["POST"])
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def complete_race(race_id):
+    return _transition_race(race_id, "completed")
+
+
+@organizer_bp.route("/api/v1/organizer/races/<int:race_id>/archive", methods=["POST"])
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def archive_race(race_id):
+    return _transition_race(race_id, "archived")
 
 
 # =============================================
@@ -55,7 +132,14 @@ def list_my_races():
 @require_managed_race()
 def list_race_registrations(race_id):
     """Organizer 查看自己管理的赛事的报名列表"""
-    registrations = reg_service.list_for_organizer(race_id, g.current_user_id)
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = min(100, max(1, int(request.args.get("per_page", 20))))
+    except ValueError as error:
+        raise ValidationError("page and per_page must be integers") from error
+    registrations = reg_service.list_for_organizer(
+        race_id, g.current_user_id, page, per_page, request.args.get("status")
+    )
     return success(registrations)
 
 

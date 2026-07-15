@@ -43,6 +43,55 @@ class RegistrationDAO:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def paginate_by_user(
+        self,
+        user_id: int,
+        page: int = 1,
+        per_page: int = 20,
+        status: str | None = None,
+    ) -> dict:
+        return self._paginate("user_id", user_id, page, per_page, status)
+
+    def paginate_by_race(
+        self,
+        race_id: int,
+        page: int = 1,
+        per_page: int = 20,
+        status: str | None = None,
+    ) -> dict:
+        return self._paginate("race_id", race_id, page, per_page, status)
+
+    def _paginate(
+        self,
+        owner_column: str,
+        owner_id: int,
+        page: int,
+        per_page: int,
+        status: str | None,
+    ) -> dict:
+        if owner_column not in {"user_id", "race_id"}:
+            raise ValueError("Unsupported registration owner column")
+        db = get_db()
+        where = f"{owner_column} = ?"
+        values: tuple = (owner_id,)
+        if status:
+            where += " AND status = ?"
+            values += (status,)
+        total = db.execute(
+            f"SELECT COUNT(*) AS count FROM registrations WHERE {where}", values
+        ).fetchone()["count"]
+        rows = db.execute(
+            f"""SELECT * FROM registrations WHERE {where}
+                ORDER BY submitted_at DESC, id DESC LIMIT ? OFFSET ?""",
+            values + (per_page, (page - 1) * per_page),
+        ).fetchall()
+        return {
+            "items": [dict(row) for row in rows],
+            "total": total,
+            "page": page,
+            "per_page": per_page,
+        }
+
     def update_status(
         self,
         registration_id: int,

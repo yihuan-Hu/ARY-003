@@ -1,15 +1,27 @@
-from flask import Blueprint, g
+from flask import Blueprint, g, request
 
 from app.services.registration_service import RegistrationService
 from app.services.race_project_service import RaceProjectService
+from app.dao.race_dao import RaceDAO
 from app.utils.auth import require_auth, require_role
 from app.utils.permissions import require_own_registration, require_own_race_project
 from app.utils.response import success, created
+from app.utils.errors import ValidationError
 
 rider_bp = Blueprint("rider", __name__)
 
 reg_service = RegistrationService()
 race_project_service = RaceProjectService()
+race_dao = RaceDAO()
+
+
+def _pagination_args():
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = min(100, max(1, int(request.args.get("per_page", 20))))
+    except ValueError as error:
+        raise ValidationError("page and per_page must be integers") from error
+    return page, per_page
 
 
 # =============================================
@@ -28,8 +40,28 @@ def submit_registration(race_id):
 @require_auth
 @require_role("rider")
 def list_my_registrations():
-    registrations = reg_service.list_for_rider(g.current_user_id)
+    page, per_page = _pagination_args()
+    registrations = reg_service.list_for_rider(
+        g.current_user_id, page, per_page, request.args.get("status")
+    )
     return success(registrations)
+
+
+@rider_bp.route("/api/v1/rider/races", methods=["GET"])
+@require_auth
+@require_role("rider")
+def list_my_races():
+    registrations = reg_service.dao.find_by_user(g.current_user_id)
+    races = []
+    for race_id in dict.fromkeys(reg["race_id"] for reg in registrations):
+        race = race_dao.find_by_id(race_id)
+        if race:
+            races.append({
+                "race_id": race["id"],
+                "name": race["name"],
+                "status": race["status"],
+            })
+    return success(races)
 
 
 @rider_bp.route("/api/v1/rider/registrations/<int:registration_id>", methods=["GET"])

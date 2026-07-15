@@ -69,8 +69,11 @@ def init_db(app=None):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             slug TEXT,
-            status TEXT NOT NULL DEFAULT 'upcoming'
-                CHECK (status IN ('upcoming', 'open', 'judging', 'ended')),
+            status TEXT NOT NULL DEFAULT 'draft'
+                CHECK (status IN (
+                    'draft', 'published', 'registration', 'running',
+                    'submitting', 'judging', 'completed', 'archived'
+                )),
             description TEXT,
             rules TEXT,
             schedule TEXT,
@@ -169,6 +172,27 @@ def init_db(app=None):
     _add_column_if_missing(cursor, "races", "organizer_name", "TEXT DEFAULT ''")
     _add_column_if_missing(cursor, "races", "start_time", "TEXT")
     _add_column_if_missing(cursor, "races", "end_time", "TEXT")
+    _add_column_if_missing(cursor, "races", "submission_deadline", "TEXT")
+    _add_column_if_missing(cursor, "races", "judging_deadline", "TEXT")
+    _add_column_if_missing(
+        cursor,
+        "races",
+        "judging_mode",
+        "TEXT NOT NULL DEFAULT 'blind' CHECK (judging_mode IN ('blind', 'open'))",
+    )
+    _add_column_if_missing(
+        cursor,
+        "races",
+        "judging_tiebreaker",
+        "TEXT NOT NULL DEFAULT 'avg' CHECK (judging_tiebreaker IN ('avg', 'median', 'trimmed_mean'))",
+    )
+    _add_column_if_missing(
+        cursor,
+        "races",
+        "ca_policy",
+        "TEXT NOT NULL DEFAULT 'rider_choice' CHECK (ca_policy IN ('organizer_specified', 'rider_choice'))",
+    )
+    _add_column_if_missing(cursor, "races", "ca_policy_config", "TEXT DEFAULT '{}'")
 
     # registrations
     cursor.execute("""

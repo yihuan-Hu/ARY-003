@@ -10,6 +10,7 @@ from app.utils.errors import (
     ConflictError,
     ForbiddenError,
 )
+from app.utils.logging import audit_log
 
 
 class RegistrationService:
@@ -23,6 +24,9 @@ class RegistrationService:
     STATUS_APPROVED = "approved"
     STATUS_REJECTED = "rejected"
     STATUS_WITHDRAWN = "withdrawn"
+    VALID_STATUSES = {
+        STATUS_SUBMITTED, STATUS_APPROVED, STATUS_REJECTED, STATUS_WITHDRAWN
+    }
 
     ALLOWED_TRANSITIONS = {
         STATUS_SUBMITTED: {
@@ -46,8 +50,8 @@ class RegistrationService:
         race = self.race_dao.find_by_id(race_id)
         if race is None:
             raise NotFoundError("Race not found")
-        if race["status"] not in ("upcoming", "open"):
-            raise InvalidStateError(f"Cannot register for race in '{race['status']}' status")
+        if race["status"] != "registration":
+            raise InvalidStateError("Registration is not open for this race")
 
         # 检查是否已有报名（数据库 UNIQUE 约束会兜底）
         existing = self.dao.find_by_race_and_user(race_id, user_id)
@@ -61,16 +65,13 @@ class RegistrationService:
             race = self.race_dao.find_by_id(race_id)
             if race is None:
                 raise NotFoundError("Race not found")
-            if race["status"] not in ("upcoming", "open"):
-                raise InvalidStateError(
-                    f"Cannot register for race in '{race['status']}' status"
-                )
+            if race["status"] != "registration":
+                raise InvalidStateError("Registration is not open for this race")
             if self.dao.find_by_race_and_user(race_id, user_id):
                 raise ConflictError("You have already registered for this race")
 
             registration = self.dao.create(race_id, user_id, commit=False)
             db.commit()
-            return registration
         except sqlite3.IntegrityError as error:
             # 并发请求可能同时通过上面的读取检查，数据库唯一约束是最终防线。
             db.rollback()
@@ -80,6 +81,11 @@ class RegistrationService:
         except Exception:
             db.rollback()
             raise
+        audit_log(
+            "registration.submit", user_id, "registration", registration["id"],
+            f"Submitted for race {race_id}",
+        )
+        return registration
 
     def get_for_rider(self, registration_id: int, user_id: int) -> dict:
         registration = self.dao.find_by_id(registration_id)
@@ -88,16 +94,32 @@ class RegistrationService:
             raise NotFoundError("Registration not found")
         return registration
 
-    def list_for_rider(self, user_id: int) -> list[dict]:
-        return self.dao.find_by_user(user_id)
+    def list_for_rider(
+        self, user_id: int, page: int, per_page: int, status: str | None
+    ) -> dict:
+        self._validate_filter_status(status)
+        return self.dao.paginate_by_user(user_id, page, per_page, status)
 
-    def list_for_organizer(self, race_id: int, organizer_user_id: int) -> list[dict]:
+    def list_for_organizer(
+        self,
+        race_id: int,
+        organizer_user_id: int,
+        page: int,
+        per_page: int,
+        status: str | None,
+    ) -> dict:
         race = self.race_dao.find_by_id(race_id)
         if race is None:
             raise NotFoundError("Race not found")
         if race["created_by_user_id"] != organizer_user_id:
             raise ForbiddenError("You can only manage your own races")
-        return self.dao.find_by_race(race_id)
+        self._validate_filter_status(status)
+        return self.dao.paginate_by_race(race_id, page, per_page, status)
+
+    def _validate_filter_status(self, status: str | None) -> None:
+        if status and status not in self.VALID_STATUSES:
+            from app.utils.errors import ValidationError
+            raise ValidationError("Invalid registration status filter")
 
     def _require_transition(self, current_status: str, target_status: str) -> None:
         allowed_targets = self.ALLOWED_TRANSITIONS.get(current_status, set())
@@ -175,7 +197,7 @@ class RegistrationService:
             )
 
             db.commit()
-            return {
+            result = {
                 "registration": updated_reg,
                 "race_project": race_project,
                 "idempotent": False,
@@ -183,6 +205,11 @@ class RegistrationService:
         except Exception:
             db.rollback()
             raise
+        audit_log(
+            "registration.approve", reviewer_user_id, "registration",
+            registration_id, "Registration approved",
+        )
+        return result
 
     def reject_registration(self, registration_id: int, reviewer_user_id: int) -> dict:
         """拒绝报名"""
@@ -213,10 +240,14 @@ class RegistrationService:
                 commit=False,
             )
             db.commit()
-            return {"registration": updated_reg}
         except Exception:
             db.rollback()
             raise
+        audit_log(
+            "registration.reject", reviewer_user_id, "registration",
+            registration_id, "Registration rejected",
+        )
+        return {"registration": updated_reg}
 
     def withdraw(self, registration_id: int, user_id: int) -> dict:
         """Rider 退赛"""
@@ -241,7 +272,11 @@ class RegistrationService:
                 commit=False,
             )
             db.commit()
-            return {"registration": updated_reg}
         except Exception:
             db.rollback()
             raise
+        audit_log(
+            "registration.withdraw", user_id, "registration",
+            registration_id, "Registration withdrawn",
+        )
+        return {"registration": updated_reg}
