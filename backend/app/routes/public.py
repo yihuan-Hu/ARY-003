@@ -5,6 +5,8 @@ from app.dao.work_dao import WorkDAO
 from app.dao.announcement_dao import AnnouncementDAO
 from app.database import get_db
 from app.services.integrity_service import verify_resource_integrity
+from app.services.award_service import AwardService
+from app.services.rider_profile_service import RiderProfileService
 from app.utils.errors import NotFoundError, ValidationError
 from app.utils.response import success
 
@@ -13,6 +15,8 @@ public_bp = Blueprint("public", __name__)
 race_dao = RaceDAO()
 work_dao = WorkDAO()
 announcement_dao = AnnouncementDAO()
+award_service = AwardService()
+rider_profile_service = RiderProfileService()
 
 PUBLIC_STATUSES = {
     "published",
@@ -144,3 +148,29 @@ def list_announcements(race_id):
     if race is None or race["status"] == "draft":
         raise NotFoundError("Race not found")
     return success(announcement_dao.find_by_race(race_id, "public"))
+
+
+# =============================================
+# 人员 C：公开榜单
+# =============================================
+
+
+@public_bp.route(
+    "/api/v1/public/races/<int:race_id>/leaderboard", methods=["GET"]
+)
+def get_leaderboard(race_id):
+    """公开榜单，按 position ASC 排列，返回奖项名 + 获奖者 + 作品标题 + 总分"""
+    leaderboard = award_service.get_leaderboard(race_id)
+    return success(leaderboard)
+
+
+# =============================================
+# 人员 C：骑手档案
+# =============================================
+
+
+@public_bp.route("/api/v1/public/riders/<int:user_id>", methods=["GET"])
+def get_rider_profile(user_id):
+    """公开骑手档案（无需认证）"""
+    profile = rider_profile_service.get_public_profile(user_id)
+    return success(profile)

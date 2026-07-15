@@ -1,11 +1,16 @@
-from flask import Blueprint, request, g
+from flask import Blueprint, request, g, Response
 
 from app.services.registration_service import RegistrationService
 from app.services.race_project_service import RaceProjectService
 from app.services.race_service import RaceService
 from app.services.announcement_service import AnnouncementService
+from app.services.award_service import AwardService
+from app.services.readiness_service import ReviewReadinessService
 from app.dao.race_dao import RaceDAO
 from app.dao.work_dao import WorkDAO
+from app.dao.judging_dao import JudgingRecordDAO, JudgeAssignmentDAO
+from app.dao.registration_dao import RegistrationDAO
+from app.dao.race_project_dao import RaceProjectDAO
 from app.database import get_db
 from app.services.integrity_service import verify_resource_integrity
 from app.utils.auth import require_auth, require_role
@@ -14,7 +19,7 @@ from app.utils.permissions import (
     require_readonly,
     check_managed_race,
 )
-from app.utils.errors import ValidationError
+from app.utils.errors import ValidationError, NotFoundError, ForbiddenError
 from app.utils.response import success, created
 from app.utils.validation import validate
 from app.schemas import (
@@ -22,6 +27,8 @@ from app.schemas import (
     RaceEditSchema,
     AnnouncementCreateSchema,
     AnnouncementEditSchema,
+    AwardCreateSchema,
+    AwardEditSchema,
 )
 from app.dao.announcement_dao import AnnouncementDAO
 
@@ -34,6 +41,12 @@ race_service = RaceService()
 work_dao = WorkDAO()
 announcement_service = AnnouncementService()
 announcement_dao = AnnouncementDAO()
+award_service = AwardService()
+readiness_service = ReviewReadinessService()
+judgment_dao = JudgingRecordDAO()
+assignment_dao = JudgeAssignmentDAO()
+registration_dao = RegistrationDAO()
+race_project_dao = RaceProjectDAO()
 
 
 # =============================================
@@ -297,3 +310,232 @@ def hide_announcement(announcement_id):
 def delete_announcement(announcement_id):
     announcement_service.delete(announcement_id, g.current_user_id)
     return success({"deleted": True})
+
+
+# =============================================
+# 人员 C：奖项管理
+# =============================================
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/awards", methods=["POST"]
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+@validate(AwardCreateSchema())
+def create_award(race_id):
+    award = award_service.create(race_id, g.current_user_id, g.validated_body)
+    return created(award)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/awards", methods=["GET"]
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def list_awards(race_id):
+    return success(award_service.list_for_race(race_id, g.current_user_id))
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/awards/<int:award_id>", methods=["PUT"]
+)
+@require_auth
+@require_role("organizer")
+@validate(AwardEditSchema())
+def update_award(award_id):
+    return success(award_service.update(award_id, g.current_user_id, g.validated_body))
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/awards/<int:award_id>", methods=["DELETE"]
+)
+@require_auth
+@require_role("organizer")
+def delete_award(award_id):
+    return success(award_service.delete(award_id, g.current_user_id))
+
+
+# =============================================
+# 人员 C：CSV 数据导出
+# =============================================
+
+
+def _sanitize_csv_cell(value: str) -> str:
+    """CSV 注入防护：以 =/+/-/@ 开头的单元格值加单引号前缀"""
+    if value is None:
+        return ""
+    s = str(value)
+    if s and s[0] in "=+-@":
+        return "'" + s
+    return s
+
+
+def _csv_response(rows: list[dict], columns: list[str], filename: str) -> Response:
+    """构建 CSV 响应"""
+    import csv
+    import io
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    # 写表头
+    writer.writerow(columns)
+    # 写数据行
+    for row in rows:
+        writer.writerow([_sanitize_csv_cell(row.get(col, "")) for col in columns])
+
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/export/registrations",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def export_registrations(race_id):
+    """导出报名数据 CSV"""
+    from app.utils.logging import audit_log
+
+    registrations = registration_dao.find_by_race(race_id)
+    # 扩展用户信息
+    rows = []
+    for reg in registrations:
+        user = get_db().execute(
+            "SELECT username, display_name, school_org FROM users WHERE id = ?",
+            (reg["user_id"],),
+        ).fetchone()
+        row = dict(reg)
+        if user:
+            row["username"] = user["username"]
+            row["display_name"] = user["display_name"]
+            row["school_org"] = user["school_org"]
+        rows.append(row)
+
+    audit_log("export.registrations", g.current_user_id, "race", race_id)
+    columns = [
+        "id", "username", "display_name", "school_org",
+        "status", "submitted_at", "reviewed_at",
+    ]
+    return _csv_response(rows, columns, f"race_{race_id}_registrations.csv")
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/export/judgments",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def export_judgments(race_id):
+    """导出评审结果 CSV"""
+    from app.utils.logging import audit_log
+
+    judgments = judgment_dao.find_by_race(race_id)
+    rows = []
+    for j in judgments:
+        row = dict(j)
+        # 不导出明文 comment 中的敏感信息，这里 comment 是评语，可以导出
+        # 计算综合分
+        row["total_score"] = round(judgment_dao.compute_score(j), 2)
+        # 获取作品标题
+        work = work_dao.find_by_id(j["work_id"])
+        row["work_title"] = work["title"] if work else ""
+        # 获取评委名
+        judge = get_db().execute(
+            "SELECT username FROM users WHERE id = ?", (j["judge_user_id"],)
+        ).fetchone()
+        row["judge_username"] = judge["username"] if judge else ""
+        rows.append(row)
+
+    audit_log("export.judgments", g.current_user_id, "race", race_id)
+    columns = [
+        "id", "work_id", "work_title", "judge_username",
+        "technical_score", "innovation_score", "presentation_score",
+        "completeness_score", "total_score", "comment",
+        "submitted_at",
+    ]
+    return _csv_response(rows, columns, f"race_{race_id}_judgments.csv")
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/export/works",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def export_works(race_id):
+    """导出作品列表 CSV（不导出明文 content）"""
+    from app.utils.logging import audit_log
+
+    works = work_dao.find_submitted_by_race(race_id)
+    rows = []
+    for w in works:
+        row = {
+            "id": w["id"],
+            "title": w["title"],
+            "description": w["description"],
+            "repo_url": w["repo_url"],
+            "demo_url": w["demo_url"],
+            "work_status": w["work_status"],
+            "visibility": w["visibility"],
+            # 只导出 commitment，不导出明文 content
+            "content_commitment": w.get("content_commitment", ""),
+            "version": w["version"],
+            "submitted_at": w["submitted_at"],
+            "disqualified": w["disqualified"],
+            "disqualify_reason": w.get("disqualify_reason", ""),
+        }
+        # 获取所属用户
+        rp = race_project_dao.find_by_id(w["race_project_id"])
+        if rp:
+            reg = registration_dao.find_by_id(rp["registration_id"])
+            if reg:
+                user = get_db().execute(
+                    "SELECT username FROM users WHERE id = ?",
+                    (reg["user_id"],),
+                ).fetchone()
+                row["username"] = user["username"] if user else ""
+        rows.append(row)
+
+    audit_log("export.works", g.current_user_id, "race", race_id)
+    columns = [
+        "id", "title", "description", "repo_url", "demo_url",
+        "work_status", "visibility", "content_commitment", "version",
+        "submitted_at", "disqualified", "disqualify_reason", "username",
+    ]
+    return _csv_response(rows, columns, f"race_{race_id}_works.csv")
+
+
+# =============================================
+# 人员 C：Review Readiness（Organizer 视角）
+# =============================================
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/review-readiness",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def get_organizer_readiness(race_id):
+    """Organizer 查看全场准备度摘要"""
+    result = readiness_service.check_for_organizer(race_id, g.current_user_id)
+    # 填充 username
+    for summary in result["summaries"]:
+        if summary["user_id"]:
+            user = get_db().execute(
+                "SELECT username FROM users WHERE id = ?",
+                (summary["user_id"],),
+            ).fetchone()
+            summary["username"] = user["username"] if user else None
+    return success(result)

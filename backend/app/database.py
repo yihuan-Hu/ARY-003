@@ -480,6 +480,73 @@ def init_db(app=None):
         )
     """)
 
+    # =============================================
+    # 人员 C：评审系统
+    # =============================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS judging_records (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            work_id INTEGER NOT NULL REFERENCES works(id),
+            judge_user_id INTEGER NOT NULL REFERENCES users(id),
+            technical_score INTEGER CHECK(technical_score BETWEEN 1 AND 10),
+            innovation_score INTEGER CHECK(innovation_score BETWEEN 1 AND 10),
+            presentation_score INTEGER CHECK(presentation_score BETWEEN 1 AND 10),
+            completeness_score INTEGER CHECK(completeness_score BETWEEN 1 AND 10),
+            comment TEXT DEFAULT '',
+            submitted_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (work_id, judge_user_id)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS judge_assignments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_id INTEGER NOT NULL REFERENCES races(id),
+            work_id INTEGER NOT NULL REFERENCES works(id),
+            judge_user_id INTEGER NOT NULL REFERENCES users(id),
+            assigned_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (work_id, judge_user_id)
+        )
+    """)
+
+    # trg_judgments_sealed：赛事结束后评分不可修改
+    cursor.execute("DROP TRIGGER IF EXISTS trg_judgments_sealed")
+    cursor.execute("""
+        CREATE TRIGGER trg_judgments_sealed
+        BEFORE UPDATE ON judging_records
+        WHEN EXISTS (
+            SELECT 1 FROM works w
+            JOIN race_projects rp ON w.race_project_id = rp.id
+            JOIN registrations reg ON rp.registration_id = reg.id
+            JOIN races r ON reg.race_id = r.id
+            WHERE w.id = NEW.work_id AND r.status IN ('completed', 'archived')
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'judgments are sealed after race ends');
+        END
+    """)
+
+    # =============================================
+    # 人员 C：奖项与榜单
+    # =============================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS awards (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_id INTEGER NOT NULL REFERENCES races(id),
+            title TEXT NOT NULL,
+            position INTEGER NOT NULL CHECK(position >= 1),
+            work_id INTEGER REFERENCES works(id),
+            registration_id INTEGER REFERENCES registrations(id),
+            description TEXT DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
     conn.commit()
     conn.execute("PRAGMA foreign_keys=ON")
 

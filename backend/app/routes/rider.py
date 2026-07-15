@@ -4,6 +4,8 @@ from app.services.registration_service import RegistrationService
 from app.services.race_project_service import RaceProjectService
 from app.services.work_service import WorkService
 from app.services.coach_service import RidingCoachService
+from app.services.readiness_service import ReviewReadinessService
+from app.services.rider_profile_service import RiderProfileService
 from app.dao.race_dao import RaceDAO
 from app.dao.work_dao import WorkDAO
 from app.utils.auth import require_auth, require_role
@@ -25,6 +27,8 @@ race_dao = RaceDAO()
 work_service = WorkService()
 work_dao = WorkDAO()
 coach_service = RidingCoachService()
+readiness_service = ReviewReadinessService()
+rider_profile_service = RiderProfileService()
 
 
 def _pagination_args():
@@ -174,3 +178,34 @@ def submit_work(work_id):
 def delete_work(work_id):
     work_service.delete(work_id, g.current_user_id)
     return success({"deleted": True})
+
+
+# =============================================
+# 人员 C：Review Readiness（Rider 视角）
+# =============================================
+
+
+@rider_bp.route(
+    "/api/v1/rider/race-projects/<int:race_project_id>/review-readiness",
+    methods=["GET"],
+)
+@require_auth
+@require_role("rider")
+@require_own_race_project()
+def get_review_readiness(race_project_id):
+    """Rider 查看自己 RaceProject 的评审准备度"""
+    result = readiness_service.check_for_rider(race_project_id, g.current_user_id)
+    return success(result)
+
+
+# =============================================
+# 人员 C：骑手档案（私有）
+# =============================================
+
+
+@rider_bp.route("/api/v1/rider/profile", methods=["GET"])
+@require_auth
+def get_my_profile():
+    """Rider 查看自己的完整档案（含未公开 work）"""
+    profile = rider_profile_service.get_private_profile(g.current_user_id)
+    return success(profile)

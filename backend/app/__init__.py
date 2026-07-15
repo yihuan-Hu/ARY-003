@@ -164,11 +164,15 @@ def create_app(config_class=Config):
     from app.routes.organizer import organizer_bp
     from app.routes.public import public_bp
     from app.routes.notification import notification_bp
+    from app.routes.judge import judge_bp
+    from app.routes.admin import admin_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(rider_bp)
     app.register_blueprint(organizer_bp)
     app.register_blueprint(public_bp)
     app.register_blueprint(notification_bp)
+    app.register_blueprint(judge_bp)
+    app.register_blueprint(admin_bp)
 
     return app

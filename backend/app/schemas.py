@@ -71,3 +71,53 @@ class AnnouncementCreateSchema(Schema):
 class AnnouncementEditSchema(Schema):
     title = fields.Str(validate=validate.Length(min=1, max=200))
     body = fields.Str(validate=validate.Length(max=10000))
+
+
+# =============================================
+# 人员 C：评审系统
+# =============================================
+
+class JudgeAssignmentBatchSchema(Schema):
+    """批量分配评委的请求体"""
+    assignments = fields.List(
+        fields.Dict(keys=fields.Str(), values=fields.Int()),
+        required=True,
+        validate=validate.Length(min=1),
+    )
+
+
+class JudgmentSubmitSchema(Schema):
+    """提交/修改四维评分"""
+    technical_score = fields.Int(
+        required=True, validate=validate.Range(min=1, max=10)
+    )
+    innovation_score = fields.Int(
+        required=True, validate=validate.Range(min=1, max=10)
+    )
+    presentation_score = fields.Int(
+        required=True, validate=validate.Range(min=1, max=10)
+    )
+    completeness_score = fields.Int(
+        required=True, validate=validate.Range(min=1, max=10)
+    )
+    comment = fields.Str(load_default="", validate=validate.Length(max=5000))
+
+
+# =============================================
+# 人员 C：奖项榜单
+# =============================================
+
+class AwardCreateSchema(Schema):
+    title = fields.Str(required=True, validate=validate.Length(min=1, max=200))
+    position = fields.Int(required=True, validate=validate.Range(min=1))
+    work_id = fields.Int(load_default=None, allow_none=True)
+    registration_id = fields.Int(load_default=None, allow_none=True)
+    description = fields.Str(load_default="", validate=validate.Length(max=1000))
+
+
+class AwardEditSchema(Schema):
+    title = fields.Str(validate=validate.Length(min=1, max=200))
+    position = fields.Int(validate=validate.Range(min=1))
+    work_id = fields.Int(allow_none=True)
+    registration_id = fields.Int(allow_none=True)
+    description = fields.Str(validate=validate.Length(max=1000))

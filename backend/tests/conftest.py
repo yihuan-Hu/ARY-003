@@ -63,18 +63,29 @@ def _db_fetchone(app, sql, params=()):
 
 
 def _create_user(app, username, password, roles):
-    """通过 API 创建用户（更接近实际流程）或直接通过 DB 创建"""
+    """通过 DB 创建或更新用户（upsert：seed 已有用户则更新密码和角色）"""
     import json as _json
     with app.app_context():
         db = get_db()
         pw_hash = hash_password(password)
         roles_json = _json.dumps(roles)
-        cursor = db.execute(
-            "INSERT INTO users (username, password_hash, roles) VALUES (?, ?, ?)",
-            (username, pw_hash, roles_json),
-        )
-        db.commit()
-        user_id = cursor.lastrowid
+        existing = db.execute(
+            "SELECT id FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        if existing:
+            db.execute(
+                "UPDATE users SET password_hash = ?, roles = ? WHERE username = ?",
+                (pw_hash, roles_json, username),
+            )
+            db.commit()
+            user_id = existing["id"]
+        else:
+            cursor = db.execute(
+                "INSERT INTO users (username, password_hash, roles) VALUES (?, ?, ?)",
+                (username, pw_hash, roles_json),
+            )
+            db.commit()
+            user_id = cursor.lastrowid
         row = db.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
         return dict(row)
 
