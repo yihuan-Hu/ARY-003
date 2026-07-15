@@ -1,22 +1,30 @@
 # Backend 文档
 
-Partner 建议阅读顺序：
+## 当前文档
 
-1. `../README.md`：启动、测试、接口入口和当前边界。
-2. `MODULE_FLOW.md`：代码目录、调用链和修改定位（**注意：描述的是旧 `routes/`/`daos/`/`services/` 层；新 ARY MVP 模块见 `../app/` 目录**）。
-3. `SECURITY_MODEL.md`：Submission 内容保护与权限安全说明。
-4. `RACEPROJECT_COMPATIBILITY.md`：**角色 4 交付** — RaceProject API 与旧 `/api/entries`、Jumbotron Snapshot 的兼容性边界分析。
+| 文档 | 作用 |
+|------|------|
+| `../README.md` | 启动、测试、接口入口和当前边界。 |
+| `../../docs/contracts.md` | 人员 A 冻结的接口契约（装饰器、BaseDAO、g对象、错误类）。 |
+| `../../docs/b-upstream-contracts-for-cd.md` | 人员 B 冻结给 C/D 的上游契约（Work 表 + DAO 签名）。 |
+| `../../team-division.md` | 五人分工方案（当前权威任务定义）。 |
+| `../../require.md` | 上线需求规格说明书。 |
 
-仓库上层的最新 ARY MVP 文档优先于本目录中的实现说明。
+旧实现说明（`MODULE_FLOW.md`、`SECURITY_MODEL.md`、`RACEPROJECT_COMPATIBILITY.md`）已归档至 `archive/`。
 
-## 当前实现状态（Checkpoint 1）
+## 当前实现状态
 
-| 能力 | 状态 | 位置 |
-|------|------|------|
-| Registration（报名/审核） | ✅ 已实现 | `../app/services/registration_service.py`、`../app/routes/rider.py`、`../app/routes/organizer.py` |
-| RaceProject（自动生成/查询） | ✅ 已实现 | `../app/services/race_project_service.py`、`../app/routes/rider.py`、`../app/routes/organizer.py` |
-| 权限策略（own/managed_race） | ✅ 已实现 | `../app/utils/permissions.py` |
-| Demo 脚本 | ✅ 已实现 | `../demo.py`（17/17 步骤通过） |
-| CAConnection | ❌ 未实现 | Checkpoint 2 |
-| Work 完整生命周期 | ❌ 未实现 | Checkpoint 2 |
-| 评审/奖项/报告 | ❌ 未实现 | 后续 Checkpoint |
+| 能力 | 状态 | 负责人 |
+|------|------|--------|
+| 认证与安全基座（SQL注入修复/随机盐密码/JWT/限流/CSRF/日志/BaseDAO/@validate/integrity_log/audit_logs） | ✅ 已实现 | 人员 A |
+| 接口契约（contracts.md） | ✅ 已冻结 | 人员 A |
+| Race 8 状态生命周期 | ❌ 待实现 | 人员 B |
+| Registration 扩展（分页/状态校验） | ❌ 待实现 | 人员 B |
+| Work 作品管理（草稿/提交/hash链/富媒体） | ❌ 待实现 | 人员 B |
+| 公开赛事浏览 + Riding Coach | ❌ 待实现 | 人员 B |
+| 赛事公告（Announcement） | ❌ 待实现 | 人员 B |
+| 评审系统（邀请/分配/评分/盲审/截止/取消资格） | ❌ 待实现 | 人员 C |
+| 奖项榜单 + CSV导出 + Review Readiness + RiderProfile + Report | ❌ 待实现 | 人员 C |
+| CA 全链路（双模式/向导/Ingestion/Live Hall/Evidence Timeline） | ❌ 待实现 | 人员 D |
+| GitHub OAuth + 旧系统收尾 | ❌ 待实现 | 人员 D |
+| 前端（15+ 页）+ CI/CD + Docker + e2e + 上线 | ❌ 待实现 | 人员 E |
