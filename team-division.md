@@ -58,7 +58,8 @@
   - `@require_auth` — JWT 必填
   - `@require_role("organizer")` — 单角色门禁
   - `@require_any_role("admin", "organizer")` — 多角色任一满足
-- [ ] 统一用户模型：`users` 表只使用 `roles TEXT NOT NULL DEFAULT '["contestant"]'`（JSON 数组），旧 `role INTEGER` 字段标记 deprecated 并在 seed 脚本里不再写入
+- [ ] 统一用户模型：`users` 表只使用 `roles TEXT NOT NULL DEFAULT '["rider"]'`（JSON 数组），旧 `role INTEGER` 字段标记 deprecated 并在 seed 脚本里不再写入
+- [ ] 角色值统一使用 `rider`（非 `contestant`）——与 docs 权限矩阵和领域分析的 `rider` role 一致
 - [ ] `UserDAO.get_roles(user) -> list[str]` — 从 JSON 字段解析，已有则保持
 - [ ] `POST /api/v1/auth/login` — 本地登录，已有，保持
 - [ ] `POST /api/v1/auth/refresh` — 用 refresh token 换新 access token（refresh token 存在 httpOnly cookie，7 天有效）
@@ -206,11 +207,30 @@ docs/contracts.md                   # A 的接口契约（装饰器/错误类/g�
 
 ### 1. Race 完整生命周期
 
-- [ ] `PUT /api/v1/organizer/races/<id>` — 编辑赛事信息（名称、描述、规则、赛程、theme、organizer_name）
-- [ ] `POST /api/v1/organizer/races/<id>/open` — 开放报名（upcoming → open）Organizer，需 `@require_managed_race`
-- [ ] `POST /api/v1/organizer/races/<id>/close` — 截止报名（open → judging）Organizer，需 `@require_managed_race`
-- [ ] `POST /api/v1/organizer/races/<id>/end` — 结束赛事（judging → ended）Organizer，需 `@require_managed_race`
-- [ ] Race `ALLOWED_TRANSITIONS` 状态机：`upcoming → open → judging → ended`，非法转换返回 422
+- [ ] `PUT /api/v1/organizer/races/<id>` — 编辑赛事信息（名称、描述、规则、赛程、theme、organizer_name），仅 draft/published/registration 状态可编辑
+
+**Race 状态机（与 docs 领域分析完全对齐）：**
+
+| 状态 | 含义 | 转换 API |
+|---|---|---|
+| `draft` | 草稿，仅创建者可见 | `POST .../publish` → published |
+| `published` | 已发布，报名未开放 | `POST .../open-registration` → registration |
+| `registration` | 报名开放中 | `POST .../start` → running |
+| `running` | 比赛进行中 | `POST .../open-submissions` → submitting |
+| `submitting` | 作品提交通道开放 | `POST .../start-judging` → judging |
+| `judging` | 评审中 | `POST .../complete` → completed |
+| `completed` | 比赛结束 | `POST .../archive` → archived |
+| `archived` | 归档沉淀 | 终态 |
+
+- [ ] Race `ALLOWED_TRANSITIONS`：`draft → published → registration → running → submitting → judging → completed → archived`，非法转换返回 422
+- [ ] 创建赛事时初始状态为 `draft`
+- [ ] `POST /api/v1/organizer/races/<id>/publish` — 发布赛事，需 `@require_managed_race`
+- [ ] `POST /api/v1/organizer/races/<id>/open-registration` — 开放报名，需 `@require_managed_race`
+- [ ] `POST /api/v1/organizer/races/<id>/start` — 开始比赛（截止报名），需 `@require_managed_race`
+- [ ] `POST /api/v1/organizer/races/<id>/open-submissions` — 开放作品提交窗口，需 `@require_managed_race`
+- [ ] `POST /api/v1/organizer/races/<id>/start-judging` — 进入评审阶段，需 `@require_managed_race`
+- [ ] `POST /api/v1/organizer/races/<id>/complete` — 结束比赛，需 `@require_managed_race`
+- [ ] `POST /api/v1/organizer/races/<id>/archive` — 归档，需 `@require_managed_race`
 - [ ] `GET /api/v1/organizer/races/<id>` — 赛事详情（owner 视角）
 - [ ] `GET /api/v1/organizer/races` — 已有，增加分页 `?page=1&per_page=20`
 - [ ] Race schema 补全字段：`start_time`、`end_time`、`rules`、`schedule`、`theme`、`organizer_name`
@@ -225,7 +245,7 @@ docs/contracts.md                   # A 的接口契约（装饰器/错误类/g�
 
 ### 2. Registration 扩展
 
-- [ ] 已有 `POST /api/v1/rider/races/<id>/registrations` → 增加校验：race.status 必须为 `open`，否则返回 422
+- [ ] 已有 `POST /api/v1/rider/races/<id>/registrations` → 增加校验：race.status 必须为 `registration`，否则返回 422
 - [ ] 已有 `GET /api/v1/rider/registrations` → 增加分页筛选 `?status=submitted&page=1&per_page=20`
 - [ ] 已有 `GET /api/v1/rider/registrations/<id>` → 保持
 - [ ] 已有 `POST /api/v1/rider/registrations/<id>/withdraw` → 保持
@@ -293,24 +313,16 @@ CREATE TABLE works (
   - `submitted_at` 为 NULL 直到首次提交
 - [ ] `GET /api/v1/rider/race-projects/<id>/works` — 查看自己的作品列表（返回所有 `work_status`，含 draft）
 - [ ] `PUT /api/v1/rider/works/<id>` — 编辑作品，需 `@require_own_work`
-  - `work_status='draft'` + race.status 不是 judging/ended → 可编辑任意字段
-  - `work_status='submitted'` + race.status 不是 judging/ended → 可编辑，但标记需重新确认提交
-  - race.status 为 judging/ended → 拒绝 UPDATE（触发器 `trg_works_sealed`）
+  - race.status 为 `draft/published/registration/running/submitting` 时可编辑
+  - race.status 为 `judging/completed/archived` → 拒绝 UPDATE（触发器 `trg_works_sealed`）
 - [ ] `POST /api/v1/rider/works/<id>/submit` — **草稿提交为正式作品**，需 `@require_own_work`
-  - `work_status` draft → submitted
-  - 此时生成 v1 hash 链：`content_hash = SHA-256(title + description + repo_url + demo_url + video_url + cover_image_url + screenshot_urls + readme_body)`
+  - race.status 必须为 `submitting` 或 `judging`，否则返回 422
+  - 生成 v1 hash 链：`content_hash = SHA-256(all_fields)`
   - `content_commitment = HMAC-SHA-256(content_hash, SUBMISSION_SECRET)`
-  - `submitted_at = datetime('now')`
   - 写入 `integrity_log`（event_type: `work.submit`）
   - 调用 `audit_log("work.submit", ...)`
-  - race.status 为 open 或 judging 均可提交，但 judging 期间提交后无法再编辑
-  - race.submission_deadline 之后 → 拒绝提交 422 "报名已截止"
-- [ ] `PUT /api/v1/rider/works/<id>` — 已提交作品的修改，需 `@require_own_work`
-  - race.status 不是 judging/ended → 可修改，自增 `version`，更新 hash 链（`prev_hash` 指向上版）
-  - 写入 `integrity_log`（event_type: `work.update`）
-  - 调用 `audit_log("work.update", ...)`
-- [ ] `DELETE /api/v1/rider/works/<id>` — 删除作品，需 `@require_own_work` + race.status 不能是 judging/ended
-  - 调用 `audit_log("work.delete", ...)`
+- [ ] 已提交作品修改（v2+ hash 链）→ race.status 为 `submitting` 时可改，`judging/completed/archived` 时锁定
+- [ ] `DELETE /api/v1/rider/works/<id>` — 删除作品，需 `@require_own_work` + race.status 不能是 `judging/completed/archived`
 - [ ] `GET /api/v1/organizer/races/<id>/works` — Organizer 查看作品列表 **只读**，需 `@require_managed_race` + `@require_readonly("work")`
   - 只返回 `work_status='submitted'` 的作品（草稿不进入评审池）
 - [ ] `GET /api/v1/organizer/works/<id>` — Organizer 查看单个作品详情（含完整描述、截图、视频、hash 链验证），需 `@require_managed_race`
@@ -324,7 +336,7 @@ WHEN (
     JOIN registrations reg ON rp.registration_id = reg.id
     JOIN races r ON reg.race_id = r.id
     WHERE rp.id = NEW.race_project_id
-) IN ('judging', 'ended')
+) IN ('judging', 'completed', 'archived')
 BEGIN
     SELECT RAISE(ABORT, 'works are sealed once judging begins');
 END;
@@ -377,7 +389,7 @@ END;
 
 **B 在本节新增的 API：**
 
-- [ ] `GET /api/v1/rider/races` — Rider 查看自己已报名的赛事列表（通过 Registration 关联），需 `@require_role("contestant")`
+- [ ] `GET /api/v1/rider/races` — Rider 查看自己已报名的赛事列表（通过 Registration 关联），需 `@require_role("rider")`
 - [ ] `GET /api/v1/organizer/races` — 已有，查询 `created_by_user_id`，增加分页 `?page=&per_page=`
 - [ ] `GET /api/v1/auth/me` 返回的 `roles` 数组由前端用于决定哪些操作按钮可见，但**不用于隐藏 Tab**
 
@@ -394,6 +406,32 @@ END;
   - Race ended + 无 Award → "赛事已结束，查看你的骑手档案"
 - [ ] 每条建议包含：`action_label`（短标题）、`description`（一句话说明）、`target_url`（前端跳转路径）
 
+### 7. 赛事公告（Announcement）
+
+- [ ] `announcements` 建表：
+
+```sql
+CREATE TABLE announcements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    race_id INTEGER NOT NULL REFERENCES races(id),
+    title TEXT NOT NULL,
+    body TEXT DEFAULT '',
+    visibility TEXT NOT NULL DEFAULT 'draft' CHECK(visibility IN ('draft', 'private', 'public')),
+    created_by_user_id INTEGER NOT NULL REFERENCES users(id),
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+- [ ] `POST /api/v1/organizer/races/<id>/announcements` — 创建公告，需 `@require_managed_race` + `@validate(AnnouncementSchema)`
+  - 调用 `audit_log("announcement.create", ...)`
+- [ ] `GET /api/v1/organizer/races/<id>/announcements` — 组织者查看所有公告（含 draft），需 `@require_managed_race`
+- [ ] `PUT /api/v1/organizer/announcements/<id>` — 编辑公告，需 `@require_managed_race`
+- [ ] `POST /api/v1/organizer/announcements/<id>/publish` — 发布（visibility → public），需 `@require_managed_race`
+- [ ] `POST /api/v1/organizer/announcements/<id>/hide` — 隐藏（visibility → private），需 `@require_managed_race`
+- [ ] `DELETE /api/v1/organizer/announcements/<id>` — 删除，需 `@require_managed_race`
+- [ ] `GET /api/v1/public/races/<id>/announcements` — 公开公告列表（只返回 `visibility='public'`），**无需认证**
+
 ### B 的交付物
 
 ```
@@ -401,6 +439,8 @@ backend/app/dao/work_dao.py              # WorkDAO（继承 BaseDAO）
 backend/app/dao/race_dao.py              # RaceDAO（已有，扩展分页 + 状态机方法）
 backend/app/services/race_service.py      # RaceService（状态机 + 生命周期）
 backend/app/services/work_service.py      # WorkService（CRUD + hash 链 + 触发器）
+backend/app/dao/announcement_dao.py     # AnnouncementDAO
+backend/app/services/announcement_service.py  # 公告 CRUD + 发布/隐藏
 backend/app/services/coach_service.py     # RidingCoachService（下一步建议）
 backend/app/routes/organizer.py           # 扩展 Race 生命周期端点
 backend/app/routes/rider.py              # 扩展 Work CRUD 端点
@@ -616,7 +656,7 @@ CREATE TABLE judge_invitations (
   - **公开评审**：`judging_mode='open'` 时返回完整信息含作者名
 - [ ] `POST /api/v1/judge/works/<id>/judgments` — 提交四维评分 + 评语，需 `@require_role("judge")`
   - 校验评委已分配到该 Work
-  - **截止时间**：`judging_deadline` 已过且 race.status 不是 ended → 拒绝 422 "评分已截止"
+  - **截止时间**：`judging_deadline` 已过 → 拒绝 422 "评分已截止"
   - 写入 `integrity_log`（event_type: `judgment.submit`）
   - 调用 `audit_log("judgment.submit", ...)`
 
@@ -625,10 +665,8 @@ CREATE TABLE judge_invitations (
 - ❌ 评审不可以：修改作品的任何字段（title/description/repo/demo/截图等）、删除作品、修改作品可见性、查看非分配给自己的作品详情
 - 实现方式：评审的路由只注册 `@require_role("judge")`，作品的写路由只认 `@require_own_work`。评审没有 Work 的 owner 身份，`@require_own_work` 自动返回 404。
 - [ ] `PUT /api/v1/judge/judgments/<id>` — 修改评分，需 `@require_role("judge")`
-  - race.status = ended 或 judging_deadline 已过 → 拒绝 422
+  - race.status 非 `judging` 或 judging_deadline 已过 → 拒绝 422
   - 写入 `integrity_log`（event_type: `judgment.update`）
-  - 调用 `audit_log("judgment.update", ...)`
-- [ ] `trg_judgments_sealed` 触发器：
 
 ```sql
 CREATE TRIGGER trg_judgments_sealed
@@ -638,7 +676,7 @@ WHEN EXISTS (
     JOIN race_projects rp ON w.race_project_id = rp.id
     JOIN registrations reg ON rp.registration_id = reg.id
     JOIN races r ON reg.race_id = r.id
-    WHERE w.id = NEW.work_id AND r.status = 'ended'
+    WHERE w.id = NEW.work_id AND r.status IN ('completed', 'archived')
 )
 BEGIN
     SELECT RAISE(ABORT, 'judgments are sealed after race ends');
@@ -681,7 +719,7 @@ CREATE TABLE awards (
   - 写入 `integrity_log`（event_type: `award.create`）
   - 调用 `audit_log("award.create", ...)`
 - [ ] `PUT /api/v1/organizer/awards/<id>` — 编辑奖项，需校验 race ownership
-- [ ] `DELETE /api/v1/organizer/awards/<id>` — 删除奖项，需校验 race ownership + race.status 不能是 ended
+- [ ] `DELETE /api/v1/organizer/awards/<id>` — 删除奖项，需校验 race ownership + race.status 不能是 `archived`
 - [ ] `GET /api/v1/organizer/races/<id>/awards` — 管理奖项列表
 - [ ] `GET /api/v1/public/races/<id>/leaderboard` — 公开榜单 **无需认证**，**实时计算、每次请求重新聚合评分数据**
   - 排除 `disqualified=1` 的作品
@@ -763,6 +801,48 @@ CREATE TABLE awards (
   ```
 - [ ] `GET /api/v1/rider/profile` — Rider 查看自己的完整档案（含未公开的 work），需 `@require_auth`
 
+### 6. 报告生成（Report）
+
+- [ ] `reports` 建表：
+
+```sql
+CREATE TABLE reports (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    race_id INTEGER NOT NULL REFERENCES races(id),
+    subject_registration_id INTEGER REFERENCES registrations(id),
+    report_type TEXT NOT NULL CHECK(report_type IN ('rider_report', 'race_report', 'review_summary')),
+    title TEXT NOT NULL,
+    body TEXT DEFAULT '',
+    visibility TEXT NOT NULL DEFAULT 'draft' CHECK(visibility IN ('draft', 'private', 'public')),
+    generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    published_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+**报告类型说明：**
+
+| report_type | subject_registration_id | 说明 |
+|---|---|---|
+| `rider_report` | ✅ 必填 | 单个选手的参赛报告，默认仅 Rider + Organizer + Admin 可见 |
+| `race_report` | ❌ 必须为空 | 赛事整体总结报告 |
+| `review_summary` | ❌ 必须为空 | 评审综述，含统计分析 |
+
+- [ ] `POST /api/v1/organizer/races/<id>/reports/generate` — 生成报告，需 `@require_managed_race`
+  - body: `{"report_type": "race_report", "title": "...", "auto_fill": true}`
+  - `auto_fill=true` 时系统自动填充赛事数据（报名数、作品数、评审完成率、奖项列表、各维度均分、参赛者排名等）
+  - 报告以 `draft` 状态生成，组织者可在发布前编辑
+  - rider_report 的 `subject_registration_id` 必填
+- [ ] `PUT /api/v1/organizer/reports/<id>` — 编辑报告（标题、正文），需 `@require_managed_race`
+- [ ] `POST /api/v1/organizer/reports/<id>/publish` — 发布报告（visibility → public），需 `@require_managed_race`
+- [ ] `POST /api/v1/organizer/reports/<id>/hide` — 隐藏报告，需 `@require_managed_race`
+- [ ] `GET /api/v1/organizer/races/<id>/reports` — 组织者查看该赛事所有报告（含 draft），需 `@require_managed_race`
+- [ ] `GET /api/v1/public/races/<id>/reports` — 公开报告列表（只返回 `visibility='public'` 的 race_report / review_summary），**无需认证**
+- [ ] `GET /api/v1/rider/registrations/<id>/report` — Rider 查看自己的 rider_report，需 `@require_own_registration`
+  - 如果报告尚未发布 → 返回 404
+- [ ] `GET /api/v1/organizer/reports/<id>` — 查看单个报告详情，需 `@require_managed_race`
+
 ### C 的交付物
 
 ```
@@ -771,6 +851,7 @@ backend/app/dao/award_dao.py             # AwardDAO
 backend/app/services/judging_service.py   # JudgingService（分配+评分+触发器）
 backend/app/services/award_service.py     # AwardService
 backend/app/services/readiness_service.py # ReviewReadinessService
+backend/app/services/report_service.py         # ReportService（生成+编辑+发布）
 backend/app/services/rider_profile_service.py  # RiderProfileService
 backend/app/routes/admin.py              # 新增（Admin 蓝图）
 backend/app/routes/judge.py              # 新增（Judge 蓝图）
@@ -806,7 +887,7 @@ CREATE TABLE ca_connections (
     race_project_id INTEGER NOT NULL REFERENCES race_projects(id),
     ca_type TEXT NOT NULL CHECK(ca_type IN ('codex', 'claude', 'other')),
     provider_name TEXT NOT NULL,
-    connection_status TEXT NOT NULL DEFAULT 'pending' CHECK(connection_status IN ('pending', 'connected', 'failed')),
+    connection_status TEXT NOT NULL DEFAULT 'pending' CHECK(connection_status IN ('pending', 'connected', 'active', 'failed')),
     ca_policy_source TEXT NOT NULL DEFAULT 'rider_choice' CHECK(ca_policy_source IN ('organizer_specified', 'rider_choice')),
     api_key_hash TEXT DEFAULT '',
     handshake_at TEXT,
@@ -839,8 +920,9 @@ CREATE TABLE ca_connections (
 - [ ] `PUT /api/v1/rider/ca-connections/<id>` — 更新 CA 配置
 - [ ] `DELETE /api/v1/rider/ca-connections/<id>` — 移除 CA 连接
 - [ ] `POST /api/v1/ca-connections/<id>/handshake` — CA 握手验证
-  - 更新 `connection_status` 为 `connected` 或 `failed`
-  - `failed` 时写入 `error_message`
+  - 握手成功 → `connection_status = 'connected'`
+  - 握手失败 → `connection_status = 'failed'` + 写入 `error_message`
+  - 后续首次 Ingestion 成功后 → `connection_status = 'active'`（CAConnectionService 自动转换）
   - 调用 `audit_log("ca_connection.handshake", ...)`
 - [ ] 更新 `RaceProjectService._format()` — 把 `ca_connections: []` 占位改为真实查询数据
 - [ ] CA 接入异常不触发 Registration 状态变更（维持现有隔离原则）
@@ -935,7 +1017,7 @@ CREATE TABLE ca_sessions (
 
 - [ ] `GET /api/v1/auth/github` — 发起 GitHub OAuth 授权（redirect 到 GitHub）
 - [ ] `GET /api/v1/auth/github/callback` — GitHub 回调处理
-  - 首次登录：自动创建 User（`github_user_id` + `github_login` 字段已在 schema 中预留），`roles = ["contestant"]`，`profile_completed = 0`
+  - 首次登录：自动创建 User（`github_user_id` + `github_login` 字段已在 schema 中预留），`roles = ["rider"]`，`profile_completed = 0`
   - 已注册：更新 `github_login`，签发 JWT
   - 调用 `audit_log("auth.login.github", ...)`
 - [ ] 如 GitHub OAuth 配置因外部原因阻塞，保留本地登录作为应急入口，但 OAuth 代码路径和文档必须完成
@@ -999,7 +1081,7 @@ tests/test_github_oauth.py                # OAuth 测试
 | 4a | ├ 通知中心 | `GET /notifications` + 铃铛 badge 显示未读数 | 已登录 |
 | 4b | ├ 评审邀请 | `GET /judge-invitations` + 接受/拒绝 | 已登录 |
 | 5 | **「我组织的比赛」Tab** | `GET /organizer/races` — 显示 `created_by_user_id` 的赛事列表。空列表时展示"创建第一场赛事"引导 | **所有人可见**，内容由是否有已创建赛事决定 |
-| 5a | ├ 赛事管理（单赛事） | `PUT /organizer/races/<id>` + open/close/end | 该赛事创建者 |
+| 5a | ├ 赛事管理（单赛事） | `PUT /organizer/races/<id>` + publish/open-registration/start/open-submissions/start-judging/complete/archive | 该赛事创建者 |
 | 5b | ├ 报名管理 | `GET /organizer/races/<id>/registrations` + approve/reject | 该赛事创建者 |
 | 5c | ├ 作品查看 | `GET /organizer/races/<id>/works`（只读） | 该赛事创建者 |
 | 5d | ├ CA 数据查看 | `GET /organizer/races/<id>/ca-sessions` | 该赛事创建者 |
@@ -1009,6 +1091,8 @@ tests/test_github_oauth.py                # OAuth 测试
 | 5h | ├ 取消资格 | `POST /organizer/works/<id>/disqualify` | 该赛事创建者 |
 | 5i | ├ 奖项管理 | `POST /organizer/races/<id>/awards` | 该赛事创建者 |
 | 5j | ├ 导出 | `GET /organizer/races/<id>/export/*` | 该赛事创建者 |
+| 5k | ├ 公告管理 | `POST /organizer/races/<id>/announcements` + publish/hide | 该赛事创建者 |
+| 5l | ├ 报告管理 | `POST /organizer/races/<id>/reports/generate` + publish | 该赛事创建者 |
 | 6 | **「我参与的比赛」Tab** | 两个子视图：<br>• 参赛身份：`GET /rider/registrations`<br>• 评审身份：`GET /judge-invitations`（已接受的） | **所有人可见**，内容由是否有报名/评审记录决定 |
 | 7 | 赛事报名 | `POST /rider/races/<id>/registrations` | 有 contestant 角色 |
 | 8 | RaceProject 工作区 | `GET /rider/race-projects/<id>` + CA 列表 + Timeline + Riding Coach | 该报名所属用户 |
@@ -1018,9 +1102,12 @@ tests/test_github_oauth.py                # OAuth 测试
 | 12 | 评审页（评委） | `GET /judge/assignments` + `POST /judge/works/<id>/judgments` | judge |
 | 13 | 榜单页（实时公开） | `GET /public/races/<id>/leaderboard`（每次请求重新聚合，含平局规则） | 所有人 |
 | 14 | 骑手档案 | `GET /public/riders/<id>` | 所有人 |
-| 15 | Live Hall 大屏 | `GET /public/races/<id>/live` + `/live/entries` | 所有人 |
+| 15 | 公告列表（公开） | `GET /public/races/<id>/announcements` | 所有人 |
+| 16 | 报告详情（公开） | `GET /public/races/<id>/reports` | 所有人 |
+| 17 | Rider 个人报告 | `GET /rider/registrations/<id>/report` | 该报名所属用户 |
+| 18 | Live Hall 大屏 | `GET /public/races/<id>/live` + `/live/entries` | 所有人 |
 
-**要点：每个用户都看到两个 Tab，不根据角色隐藏。如果用户是纯 contestant，「我组织的比赛」Tab 内容为空+显示引导；如果用户是纯 organizer，「我参与的比赛」Tab 内容为空+显示引导；如果两者都是，两个 Tab 都有实际内容。**
+**要点：每个用户都看到两个 Tab，不根据角色隐藏。如果用户是纯 rider，「我组织的比赛」Tab 内容为空+显示引导；如果用户是纯 organizer，「我参与的比赛」Tab 内容为空+显示引导；如果两者都是，两个 Tab 都有实际内容。**
 
 - [ ] 所有用户输入的文本在渲染时做 HTML escape（防 XSS）
 - [ ] 每个页面覆盖状态：loading / empty / success / error / unauthorized / forbidden / not found
@@ -1058,39 +1145,45 @@ tests/test_github_oauth.py                # OAuth 测试
 01. 数据库初始化验证
 02. 创建 admin 用户、Organizer、Rider A、Rider B、Judge X、Judge Y
 03. Organizer 登录
-04. Organizer 创建赛事（ca_policy=rider_choice, judging_mode=blind, judging_tiebreaker=avg, submission_deadline, judging_deadline）
-05. Organizer 开放报名（open）
+04. Organizer 创建赛事（draft，ca_policy=rider_choice, judging_mode=blind, judging_tiebreaker=avg, submission_deadline, judging_deadline）
+05. Organizer 发布赛事（draft → published）
+05b. Organizer 开放报名（published → registration）
 06. Rider A 报名 → 通知
 07. Rider A 重复报名 → 409
 08. Rider B 报名
-09. Organizer 批准 Rider A → RaceProject 生成 → 通知
-10. Organizer 拒绝 Rider B → 通知
-11. Rider A 查看 RaceProject
-12. Rider A 创建作品（draft）+ 上传截图/视频 → 编辑 2 次
-13. Rider A 提交作品（submit）→ v1 hash 链生成
-14. Rider A 修改已提交作品 → v2 hash 链更新
-15. Rider A 接入 CA + 握手 → connected
-16. Organizer 查看作品列表 + 点开详情（截图/视频/README）
-17. Organizer 搜索平台账号 → 选择 Judge X、Judge Y
-18. Organizer 发送评审邀请 → Judge X 收到通知
-19. Organizer 尝试分配未接受邀请的评委 → 422 "该用户尚未接受评审邀请"
-20. Judge X 查看评审邀请 → 点击接受 → 自动获得 judge 角色
-21. Judge Y 查看评审邀请 → 点击接受
-22. Organizer 分配评委（Judge X → Work A，Judge Y → Work A）
-23. Organizer 尝试把 Rider A 分配为评委 → 422 "不能评审自己的作品"
-24. Judge X 查看评审清单（盲审：看不到 rider_name）
-25. Judge X 提交评分
-26. Judge Y 提交评分
-27. Judge Y 修改评分（截止前）
-28. 榜单实时查询 → 排名自动计算
-29. Organizer 查看评审汇总
-26. Organizer 取消资格 Rider B 作品（如适用）
-27. judging_deadline 过后 → Judge X 尝试修改 → 422
-28. Organizer 结束赛事（end）→ 评分全部锁定
-29. Organizer 创建奖项（关联 Work A）
-30. 公开榜单 → 含奖项 title
-31. 验证 Work hash 链完整性 → valid=true
-32. 模拟数据库篡改 → verify_resource_integrity 检测到断裂
+09. Organizer 开始比赛（registration → running）
+10. Organizer 批准 Rider A → RaceProject 生成 → 通知
+11. Organizer 拒绝 Rider B → 通知
+12. Organizer 开放作品提交（running → submitting）
+13. Rider A 查看 RaceProject
+14. Rider A 创建作品（draft）+ 上传截图/视频 → 编辑 2 次
+15. Rider A 提交作品（submit）→ v1 hash 链生成
+16. Rider A 修改已提交作品 → v2 hash 链更新
+17. Rider A 接入 CA + 握手 → connected
+18. Organizer 查看作品列表 + 点开详情
+19. Organizer 进入评审（submitting → judging）→ 作品锁定
+20. Rider A 尝试编辑 locked 作品 → 422
+21. Organizer 搜索平台账号 → 选择 Judge X、Judge Y
+22. Organizer 发送评审邀请 → Judge X 收到通知
+23. Organizer 尝试分配未接受邀请的评委 → 422
+24. Judge X 接受邀请 → 自动获得 judge 角色
+25. Judge Y 接受邀请
+26. Organizer 分配评委（Judge X → Work A，Judge Y → Work A）
+27. Organizer 尝试把 Rider A 分配为评委 → 422
+28. Judge X 查看评审清单（盲审）
+29. Judge X 提交评分
+30. Judge Y 提交评分
+31. Judge Y 修改评分（judging 截止前）
+32. 榜单实时查询 → 排名自动计算
+33. Organizer 查看评审汇总
+34. Organizer 取消资格（如适用）
+35. judging_deadline 过后 → Judge X 尝试修改 → 422
+36. Organizer 结束比赛（judging → completed）→ 评分锁定
+37. Organizer 创建奖项（关联 Work A）
+38. 公开榜单 → 含奖项 title
+39. Organizer 归档（completed → archived）
+40. 验证 Work hash 链完整性 → valid=true
+41. 模拟数据库篡改 → verify_resource_integrity 检测到断裂
 ```
 
 - [ ] 安全验收：按 `require.md` 附录 10.1 的 12 项安全缺陷逐条复核，每项有通过/不通过结论
@@ -1161,7 +1254,7 @@ backend/full_demo.py            # 全流程 e2e demo（32 步）
 | 人员 | 必须通过 |
 |---|---|
 | **A** | ① `bandit` 零告警 ② 登录限流脚本验证（5 次失败 → 429）③ 旧 `utils/auth.py` 已删除 ④ CORS 未配置白名单时启动 crash ⑤ 密码哈希为随机盐 ⑥ `@require_readonly` Organizer 无法 PUT/POST Work ⑦ `integrity_log` append-only 触发器生效 |
-| **B** | ① Race 状态机 4 种转换 + 非法返回 422 ② 报名时 race 非 open → 422 ③ Work 每次修改 hash 链可验证 ④ judging 后 Work 不可修改（触发器）⑤ 公开 API 无需 token ⑥ 分页生效 ⑦ Riding Coach 返回正确下一步 ⑧ 18+ 测试全部通过 |
-| **C** | ① 评委不能评未分配作品 → 403 ② 同一作品不可重复评分 → 409 ③ ended 后评分不可改（触发器）④ 榜单按 position 排列正确 ⑤ CSV 无明文 content ⑥ CSV 注入防护生效 ⑦ Review Readiness 检测规则全部触发 ⑧ RiderProfile 聚合数据正确 ⑨ 12+ 测试全部通过 |
+| **B** | ① Race 状态机 4 种转换 + 非法返回 422 ② 报名时 race 非 registration → 422 ③ Work 每次修改 hash 链可验证 ④ judging 后 Work 不可修改（触发器）⑤ 公开 API 无需 token ⑥ 分页生效 ⑦ Riding Coach 返回正确下一步 ⑧ 公告 CRUD + publish/hide 生效 ⑨ 18+ 测试全部通过 |
+| **C** | ① 评委不能评未分配作品 → 403 ② 同一作品不可重复评分 → 409 ③ ended 后评分不可改（触发器）④ 榜单按 position 排列正确 ⑤ CSV 无明文 content ⑥ CSV 注入防护生效 ⑦ Review Readiness 检测规则全部触发 ⑧ RiderProfile 聚合数据正确 ⑨ Report 生成含 auto_fill 赛事数据 ⑩ rider_report 仅 Rider 可见 ⑪ 12+ 测试全部通过 |
 | **D** | ① CA 全链路（登记 → 握手 → Ingestion → Live 聚合）数据一致 ② API Key 存储为 HMAC hash 不存明文 ③ 握手失败错误原因分类正确 ④ Live Hall 聚合数据与实际 Session 数据一致 ⑤ GitHub OAuth 首次登录自动建用户 ⑥ 旧 Jumbotron 返回 301 + deprecation 头 ⑦ Evidence Timeline 事件顺序正确 ⑧ 10+ 测试全部通过 |
 | **E** | ① `docker-compose up` 一键启动 ② `python full_demo.py` 32 步全部通过 ③ `pytest` 全部通过 + 覆盖率 ≥ 80% ④ 前端 15 个页面可用（含 loading/empty/error 状态）⑤ 模拟篡改后 `verify_resource_integrity()` 检测到 hash 链断裂 ⑥ `require.md` 12 项安全复核全部通过 ⑦ `docs/openapi.yaml` 覆盖全部端点 |

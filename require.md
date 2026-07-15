@@ -63,7 +63,8 @@
 
 ### 2.2 用户模型
 
-- [ ] `users` 表：`roles TEXT NOT NULL DEFAULT '["contestant"]'`（JSON 数组，支持 `["contestant", "organizer", "judge", "admin"]`）
+- [ ] `users` 表：`roles TEXT NOT NULL DEFAULT '["rider"]'`（JSON 数组，支持 `["rider", "organizer", "judge", "admin"]`）
+- [ ] 角色值使用 `rider` 而非 `contestant`——与 docs 权限矩阵和领域分析保持一致
 - [ ] 一人可同时拥有多个角色——在赛事 A 是选手、赛事 B 是评委、赛事 C 是组织者
 - [ ] 旧 `role INTEGER` 字段废弃
 
@@ -78,11 +79,29 @@
 
 ### 3.1 生命周期
 
-- [ ] Race 状态机：`upcoming → open → judging → ended`，非法转换返回 422
+- [ ] Race 状态机（与 docs 领域分析完全对齐）：`draft → published → registration → running → submitting → judging → completed → archived`
+  - 非法转换返回 422
+
+| 状态 | 含义 | 组织者可执行操作 |
+|---|---|---|
+| `draft` | 草稿，仅创建者可见 | publish → `published` |
+| `published` | 已发布，报名未开放 | open_registration → `registration` |
+| `registration` | 报名开放中 | start → `running` |
+| `running` | 比赛进行中 | open_submissions → `submitting` |
+| `submitting` | 作品提交通道开放 | start_judging → `judging` |
+| `judging` | 评审中 | complete → `completed` |
+| `completed` | 比赛结束 | archive → `archived` |
+| `archived` | 归档沉淀 | 终态 |
+
+- [ ] 创建赛事时初始状态为 `draft`
 - [ ] 组织者创建赛事时填写：name（必填）、description、start_time、end_time、rules、schedule、theme、organizer_name
-- [ ] `POST /organizer/races/<id>/open` — 开放报名
-- [ ] `POST /organizer/races/<id>/close` — 截止报名，进入评审
-- [ ] `POST /organizer/races/<id>/end` — 结束赛事，锁定所有数据
+- [ ] `POST /organizer/races/<id>/publish` — draft → published
+- [ ] `POST /organizer/races/<id>/open-registration` — published → registration
+- [ ] `POST /organizer/races/<id>/start` — registration → running
+- [ ] `POST /organizer/races/<id>/open-submissions` — running → submitting
+- [ ] `POST /organizer/races/<id>/start-judging` — submitting → judging
+- [ ] `POST /organizer/races/<id>/complete` — judging → completed
+- [ ] `POST /organizer/races/<id>/archive` — completed → archived
 - [ ] 列表接口：分页 `?page=1&per_page=20`
 
 ### 3.2 评审配置
@@ -109,7 +128,7 @@
 
 ## 4. 报名（Registration）
 
-- [ ] `POST /rider/races/<id>/registrations` — 报名，校验 race.status 必须为 `open`
+- [ ] `POST /rider/races/<id>/registrations` — 报名，校验 race.status 必须为 `registration`
 - [ ] `GET /rider/registrations` — 查看自己的报名列表，支持 `?status=&page=&per_page=`
 - [ ] `GET /rider/registrations/<id>` — 查看自己的报名详情，非 owner 返回 404
 - [ ] `POST /rider/registrations/<id>/withdraw` — 退赛
