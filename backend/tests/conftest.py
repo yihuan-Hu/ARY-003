@@ -140,16 +140,32 @@ def rider_b_token(client, rider_b):
 @pytest.fixture
 def race_a(client, organizer_a, organizer_a_token):
     resp = client.post("/api/v1/organizer/races",
-                       data=json.dumps({"name": "Race A", "status": "open"}),
+                       data=json.dumps({"name": "Race A"}),
                        content_type="application/json",
                        headers={"Authorization": f"Bearer {organizer_a_token}"})
-    return json.loads(resp.data)["data"]
+    race = json.loads(resp.data)["data"]
+    for action in ("publish", "open-registration"):
+        transition = client.post(
+            f"/api/v1/organizer/races/{race['id']}/{action}",
+            headers={"Authorization": f"Bearer {organizer_a_token}"},
+        )
+        assert transition.status_code == 200
+        race = json.loads(transition.data)["data"]
+    return race
 
 
 @pytest.fixture
 def race_b(client, organizer_b, organizer_b_token):
     resp = client.post("/api/v1/organizer/races",
-                       data=json.dumps({"name": "Race B", "status": "open"}),
+                       data=json.dumps({"name": "Race B"}),
                        content_type="application/json",
                        headers={"Authorization": f"Bearer {organizer_b_token}"})
-    return json.loads(resp.data)["data"]
+    race = json.loads(resp.data)["data"]
+    for action in ("publish", "open-registration"):
+        transition = client.post(
+            f"/api/v1/organizer/races/{race['id']}/{action}",
+            headers={"Authorization": f"Bearer {organizer_b_token}"},
+        )
+        assert transition.status_code == 200
+        race = json.loads(transition.data)["data"]
+    return race

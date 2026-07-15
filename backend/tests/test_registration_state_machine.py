@@ -315,12 +315,12 @@ def test_submit_rechecks_race_status_inside_transaction(
             if reads["count"] == 1:
                 return race
             closed = dict(race)
-            closed["status"] = "ended"
+            closed["status"] = "completed"
             return closed
 
         monkeypatch.setattr(service.race_dao, "find_by_id", simulate_race_closing)
 
-        with pytest.raises(InvalidStateError, match="ended"):
+        with pytest.raises(InvalidStateError, match="Registration is not open"):
             service.submit(race_a["id"], rider_a["id"])
 
         assert service.dao.find_by_race_and_user(race_a["id"], rider_a["id"]) is None

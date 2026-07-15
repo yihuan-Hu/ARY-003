@@ -4,6 +4,8 @@
 
 来源：`team-division.md` 中人员 B「赛事核心域」第一批上游交付要求。
 
+当前实现口径：Work 仅可在 Race=`submitting` 时提交或重提；进入 `judging` 后 Rider 禁止提交、编辑和删除。C 冻结依赖的 `set_disqualified()` / `restore()` 属审核处置，不受内容封存触发器影响。
+
 ---
 
 ## 快速索引

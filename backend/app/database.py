@@ -10,6 +10,39 @@ from app.config import Config
 # ---- 白名单正则：只允许字母数字下划线，防止 table/column 注入 ----
 _VALID_IDENTIFIER = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
 
+_RACES_TABLE_SQL = """
+    CREATE TABLE IF NOT EXISTS races (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        slug TEXT,
+        status TEXT NOT NULL DEFAULT 'draft'
+            CHECK (status IN (
+                'draft', 'published', 'registration', 'running',
+                'submitting', 'judging', 'completed', 'archived'
+            )),
+        description TEXT,
+        rules TEXT,
+        schedule TEXT,
+        visibility TEXT DEFAULT 'private',
+        created_by_user_id INTEGER REFERENCES users(id),
+        theme TEXT DEFAULT '',
+        organizer_name TEXT DEFAULT '',
+        start_time TEXT,
+        end_time TEXT,
+        submission_deadline TEXT,
+        judging_deadline TEXT,
+        judging_mode TEXT NOT NULL DEFAULT 'blind'
+            CHECK (judging_mode IN ('blind', 'open')),
+        judging_tiebreaker TEXT NOT NULL DEFAULT 'avg'
+            CHECK (judging_tiebreaker IN ('avg', 'median', 'trimmed_mean')),
+        ca_policy TEXT NOT NULL DEFAULT 'rider_choice'
+            CHECK (ca_policy IN ('organizer_specified', 'rider_choice')),
+        ca_policy_config TEXT DEFAULT '{}',
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+"""
+
 
 def _validate_identifier(name: str, context: str) -> None:
     if not _VALID_IDENTIFIER.match(name):
@@ -48,6 +81,46 @@ def _add_column_if_missing(cursor, table: str, column: str, col_def: str):
         cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_def}")
 
 
+def _migrate_legacy_races(cursor) -> None:
+    row = cursor.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='races'"
+    ).fetchone()
+    if row is None or "'upcoming'" not in row[0]:
+        return
+
+    cursor.execute("PRAGMA legacy_alter_table=ON")
+    cursor.execute("ALTER TABLE races RENAME TO races_legacy")
+    cursor.execute(_RACES_TABLE_SQL)
+
+    legacy_columns = {
+        item["name"] for item in cursor.execute("PRAGMA table_info(races_legacy)")
+    }
+    target_columns = [
+        item["name"] for item in cursor.execute("PRAGMA table_info(races)")
+        if item["name"] in legacy_columns
+    ]
+    for column in target_columns:
+        _validate_identifier(column, "race migration")
+    select_parts = []
+    for column in target_columns:
+        if column == "status":
+            select_parts.append(
+                "CASE status "
+                "WHEN 'upcoming' THEN 'draft' "
+                "WHEN 'open' THEN 'registration' "
+                "WHEN 'ended' THEN 'completed' "
+                "ELSE status END"
+            )
+        else:
+            select_parts.append(column)
+    cursor.execute(
+        f"""INSERT INTO races ({', '.join(target_columns)})
+            SELECT {', '.join(select_parts)} FROM races_legacy"""
+    )
+    cursor.execute("DROP TABLE races_legacy")
+    cursor.execute("PRAGMA legacy_alter_table=OFF")
+
+
 # ---- 数据库初始化 ----
 
 def init_db(app=None):
@@ -57,28 +130,17 @@ def init_db(app=None):
 
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON")
+    # Schema migrations may rebuild parent tables. Re-enable FK checks after
+    # the migration transaction commits.
+    conn.execute("PRAGMA foreign_keys=OFF")
 
     cursor = conn.cursor()
 
     # =============================================
     # 旧表（保留兼容）
     # =============================================
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS races (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            slug TEXT,
-            status TEXT NOT NULL DEFAULT 'upcoming'
-                CHECK (status IN ('upcoming', 'open', 'judging', 'ended')),
-            description TEXT,
-            rules TEXT,
-            schedule TEXT,
-            visibility TEXT DEFAULT 'private',
-            created_at TEXT NOT NULL DEFAULT (datetime('now')),
-            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-        )
-    """)
+    cursor.execute(_RACES_TABLE_SQL)
+    _migrate_legacy_races(cursor)
 
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS riders (
@@ -169,6 +231,27 @@ def init_db(app=None):
     _add_column_if_missing(cursor, "races", "organizer_name", "TEXT DEFAULT ''")
     _add_column_if_missing(cursor, "races", "start_time", "TEXT")
     _add_column_if_missing(cursor, "races", "end_time", "TEXT")
+    _add_column_if_missing(cursor, "races", "submission_deadline", "TEXT")
+    _add_column_if_missing(cursor, "races", "judging_deadline", "TEXT")
+    _add_column_if_missing(
+        cursor,
+        "races",
+        "judging_mode",
+        "TEXT NOT NULL DEFAULT 'blind' CHECK (judging_mode IN ('blind', 'open'))",
+    )
+    _add_column_if_missing(
+        cursor,
+        "races",
+        "judging_tiebreaker",
+        "TEXT NOT NULL DEFAULT 'avg' CHECK (judging_tiebreaker IN ('avg', 'median', 'trimmed_mean'))",
+    )
+    _add_column_if_missing(
+        cursor,
+        "races",
+        "ca_policy",
+        "TEXT NOT NULL DEFAULT 'rider_choice' CHECK (ca_policy IN ('organizer_specified', 'rider_choice'))",
+    )
+    _add_column_if_missing(cursor, "races", "ca_policy_config", "TEXT DEFAULT '{}'")
 
     # registrations
     cursor.execute("""
@@ -225,6 +308,70 @@ def init_db(app=None):
             disqualified INTEGER NOT NULL DEFAULT 0
                 CHECK (disqualified IN (0, 1)),
             disqualify_reason TEXT DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
+    # Rider-facing content is immutable once judging starts. Moderation fields
+    # remain writable so C can disqualify or restore a submitted work.
+    cursor.execute("DROP TRIGGER IF EXISTS trg_works_sealed")
+    cursor.execute("""
+        CREATE TRIGGER trg_works_sealed
+        BEFORE UPDATE ON works
+        WHEN (
+            SELECT r.status FROM race_projects rp
+            JOIN registrations reg ON rp.registration_id = reg.id
+            JOIN races r ON reg.race_id = r.id
+            WHERE rp.id = NEW.race_project_id
+        ) IN ('judging', 'completed', 'archived')
+        AND (
+            OLD.race_project_id IS NOT NEW.race_project_id OR
+            OLD.title IS NOT NEW.title OR
+            OLD.description IS NOT NEW.description OR
+            OLD.repo_url IS NOT NEW.repo_url OR
+            OLD.demo_url IS NOT NEW.demo_url OR
+            OLD.video_url IS NOT NEW.video_url OR
+            OLD.cover_image_url IS NOT NEW.cover_image_url OR
+            OLD.screenshot_urls IS NOT NEW.screenshot_urls OR
+            OLD.readme_body IS NOT NEW.readme_body OR
+            OLD.work_status IS NOT NEW.work_status OR
+            OLD.visibility IS NOT NEW.visibility OR
+            OLD.content_hash IS NOT NEW.content_hash OR
+            OLD.content_commitment IS NOT NEW.content_commitment OR
+            OLD.prev_hash IS NOT NEW.prev_hash OR
+            OLD.version IS NOT NEW.version OR
+            OLD.submitted_at IS NOT NEW.submitted_at
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'works are sealed once judging begins');
+        END
+    """)
+
+    cursor.execute("DROP TRIGGER IF EXISTS trg_works_sealed_delete")
+    cursor.execute("""
+        CREATE TRIGGER trg_works_sealed_delete
+        BEFORE DELETE ON works
+        WHEN (
+            SELECT r.status FROM race_projects rp
+            JOIN registrations reg ON rp.registration_id = reg.id
+            JOIN races r ON reg.race_id = r.id
+            WHERE rp.id = OLD.race_project_id
+        ) IN ('judging', 'completed', 'archived')
+        BEGIN
+            SELECT RAISE(ABORT, 'works are sealed once judging begins');
+        END
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS announcements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_id INTEGER NOT NULL REFERENCES races(id),
+            title TEXT NOT NULL,
+            body TEXT DEFAULT '',
+            visibility TEXT NOT NULL DEFAULT 'draft'
+                CHECK (visibility IN ('draft', 'private', 'public')),
+            created_by_user_id INTEGER NOT NULL REFERENCES users(id),
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
@@ -334,6 +481,7 @@ def init_db(app=None):
     """)
 
     conn.commit()
+    conn.execute("PRAGMA foreign_keys=ON")
 
     # ---- 种子用户（随机密码，打印到控制台） ----
     seed_default_users(conn)

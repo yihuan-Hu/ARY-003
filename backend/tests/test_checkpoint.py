@@ -73,7 +73,7 @@ def test_rider_view_own_registrations(client, rider_a_token, race_a):
     resp = client.get("/api/v1/rider/registrations",
                       headers={"Authorization": f"Bearer {rider_a_token}"})
     assert resp.status_code == 200
-    registrations = json.loads(resp.data)["data"]
+    registrations = json.loads(resp.data)["data"]["items"]
     assert len(registrations) >= 1
     assert any(r["id"] == reg_id for r in registrations)
 
@@ -372,7 +372,7 @@ def test_full_e2e_flow(client, race_a, organizer_a, organizer_a_token, rider_a, 
         headers={"Authorization": f"Bearer {organizer_a_token}"}
     )
     assert regs_resp.status_code == 200
-    regs = json.loads(regs_resp.data)["data"]
+    regs = json.loads(regs_resp.data)["data"]["items"]
     assert any(r["id"] == reg_id for r in regs)
 
     # 6. Organizer 查看 managed race 的 RaceProjects
