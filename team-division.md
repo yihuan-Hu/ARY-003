@@ -116,6 +116,8 @@ CREATE TABLE notifications (
 
 - [ ] `@require_own_work(work_id_param)` 装饰器：校验 Work → RaceProject → Registration → User 归属链，非 owner 返回 404
 - [ ] `@require_readonly(domain)` 装饰器：标记某角色的某域只有读权限（例如 Organizer 对 Work 只能 GET 不能 POST/PUT/DELETE），写操作返回 403
+  - `@require_readonly("work")` 用于 Organizer 查看作品列表/详情的路由
+  - 评审对作品无任何写权限——评审的路由只注册 `judgments` 端点，作品的写路由由 `@require_own_work` 独占，评审调用作品修改 API 会因不满足所有权而返回 404
 - [ ] 跨赛事主办方隔离：所有 Organizer 路由中涉及 Registration/RaceProject/Work/JudgingRecord/Award 的操作，必须在 Service 层校验 `race.created_by_user_id == current_user_id`
 - [ ] `integrity_log` 建表（append-only + 不可删除 + 不可修改）：
 
@@ -213,6 +215,9 @@ docs/contracts.md                   # A 的接口契约（装饰器/错误类/g�
 - [ ] `GET /api/v1/organizer/races` — 已有，增加分页 `?page=1&per_page=20`
 - [ ] Race schema 补全字段：`start_time`、`end_time`、`rules`、`schedule`、`theme`、`organizer_name`
   - `submission_deadline TEXT` — 作品提交截止时间（ISO 8601），截止后 draft 不可再 submit
+  - `judging_deadline TEXT` — 评分截止时间（ISO 8601），截止后评委不可再提交/修改评分
+  - `judging_mode TEXT NOT NULL DEFAULT 'blind' CHECK(judging_mode IN ('blind', 'open'))` — 盲审/公开评审
+  - `judging_tiebreaker TEXT NOT NULL DEFAULT 'avg' CHECK(judging_tiebreaker IN ('avg', 'median', 'trimmed_mean'))` — 同分时排名规则
   - 新增 CA 策略字段：`ca_policy TEXT NOT NULL DEFAULT 'rider_choice' CHECK(ca_policy IN ('organizer_specified', 'rider_choice'))`
   - `ca_policy = 'organizer_specified'` → 赛事方在创建赛事时预设允许的 CA 类型和配置模板，参赛者只能从中选择
   - `ca_policy = 'rider_choice'` → 参赛者可以自由选择任何 CA 类型并自己配置
@@ -308,6 +313,7 @@ CREATE TABLE works (
   - 调用 `audit_log("work.delete", ...)`
 - [ ] `GET /api/v1/organizer/races/<id>/works` — Organizer 查看作品列表 **只读**，需 `@require_managed_race` + `@require_readonly("work")`
   - 只返回 `work_status='submitted'` 的作品（草稿不进入评审池）
+- [ ] `GET /api/v1/organizer/works/<id>` — Organizer 查看单个作品详情（含完整描述、截图、视频、hash 链验证），需 `@require_managed_race`
 - [ ] `trg_works_sealed` 触发器：race 进入 judging 后，works 的 UPDATE/DELETE 被拒绝
 
 ```sql
@@ -337,14 +343,12 @@ END;
 
 **每个账号登录后，前端始终展示两个 Tab：「我组织的比赛」和「我参与的比赛」。不根据角色隐藏 Tab——所有用户都能看到两个入口。**
 
-区别在于：每个 Tab 里的**内容和可操作项**由实际数据决定。
+同一个用户可以在赛事 A 是组织者、在赛事 B 是参赛者、在赛事 C 是评审——每个比赛内的身份互相独立。
 
 | 视图 | 数据来源 | 展示内容 |
 |---|---|---|
-| **我组织的比赛** | `GET /api/v1/organizer/races` | 当前用户作为 `created_by_user_id` 的赛事列表。如果用户没创建过赛事，列表为空，Tab 内展示引导文案"你还没有组织过赛事，创建第一场"。 |
-| **我参与的比赛** | `GET /api/v1/rider/registrations` + `GET /api/v1/rider/races` | 当前用户作为参赛者的报名记录和对应赛事。如果用户没报名过，列表为空，引导"浏览公开赛事并报名"。 |
-
-**同一用户可以在赛事 A 是组织者，在赛事 B 是参赛者——两个 Tab 各自独立，互不影响。**
+| **我组织的比赛** | `GET /api/v1/organizer/races` | 当前用户作为 `created_by_user_id` 的赛事列表。如果没创建过赛事，列表为空，引导"创建第一场赛事"。 |
+| **我参与的比赛** | `GET /api/v1/rider/registrations` + `GET /api/v1/rider/races` | 两个子视图：<br>• **作为参赛者**：报名记录和对应赛事。空则引导"浏览公开赛事并报名"<br>• **作为评审**：已接受评审邀请的赛事列表（`judge_invitations WHERE status='accepted'`） |
 
 | 操作 | 权限 |
 |---|---|
@@ -353,16 +357,18 @@ END;
 | 编辑赛事 / 开赛 / 截止 / 结束 | `@require_managed_race`（`created_by_user_id == current_user_id`） |
 | 查看报名列表 | `@require_managed_race` |
 | 审批/拒绝报名 | `@require_managed_race`（Service 层校验 reviewer_scope） |
-| 查看参赛者作品 | `@require_managed_race`，**只读**（`@require_readonly("work")`），不可增删改 |
+| 查看参赛者作品 | `@require_managed_race`，**只读**（`@require_readonly("work")`） |
 | 查看 CA 数据 | `@require_managed_race` |
-| 分配评委 | `@require_role("admin")` |
-| 发奖/导出 | `@require_managed_race` |
+| 发送评审邀请 | `@require_managed_race` |
+| 分配评委（仅已接受邀请的） | `@require_managed_race` |
+| 查看评审汇总 | `@require_managed_race` |
+| 取消资格 / 发奖 / 导出 | `@require_managed_race` |
 | **我参与的比赛 Tab 内** | |
-| 浏览公开赛事 | 无需认证 |
-| 报名 | `@require_role("contestant")`，race.status 必须为 `open` |
-| 查看自己的报名 | `@require_own_registration`（`user_id == current_user_id`） |
-| 退赛 | `@require_own_registration` |
-| 查看自己的 RaceProject | `@require_own_race_project`（归属链: RaceProject→Registration→User） |
+| — 作为参赛者 | 同上（报名/退赛/工作区/作品） |
+| — 作为评审 | |
+| 查看评审邀请 | `GET /judge-invitations`，接受/拒绝 |
+| 已接受后查看分配 | `GET /judge/assignments` |
+| 评分 | `POST /judge/works/<id>/judgments` |
 | 接入 CA | `@require_own_race_project` |
 | 提交/编辑/删除作品 | `@require_own_work`，judging 后锁定 |
 | 查看 Review Readiness / Timeline / Coach | `@require_own_race_project` |
@@ -414,6 +420,92 @@ backend/tests/test_coach.py              # Coach 建议测试
 
 ### 1. 评审系统
 
+**完整链路：组织者如何拿到并评审作品**
+
+```
+参赛者                    组织者                       评委
+──────                    ──────                       ────
+
+1. 创建草稿(draft)
+   ├ 反复编辑
+   └ 提交(submit) ───→ 2. 看到作品列表
+                         GET /organizer/races/<id>/works
+                         （只看 submitted 的）
+
+                      3. 点开作品详情
+                         GET /organizer/works/<id>
+                         （看截图/视频/README/hash链）
+
+                      4. 分配评委 ────────────────→ 5. 收到通知
+                         POST /organizer/races/<id>      GET /judge/assignments
+                         /judge-assignments               看到待评清单
+                         （组织者自己赛事的评委分配，
+                           不需要 Admin 介入）        6. 打分 1-10 × 4 维度
+                                                         POST /judge/works/<id>/judgments
+
+                      7. 查看评审结果 ←───────────── 
+                         GET /organizer/races/<id>
+                         /judgments
+                         （汇总：各维度均分、总分、
+                          评语列表、已评/应评人数）
+
+                      8. 根据评分发奖
+                         POST /organizer/races/<id>/awards
+
+                      9. 发布榜单
+                         公开可见
+```
+
+**关键：组织者是评审流程的主控者。组织者创建赛事 → 从平台已有账号中选择评委并发送邀请 → 受邀者接受邀请成为评委 → 分配评委到作品 → 评委打分 → 组织者查看汇总 → 发奖 → 榜单实时公开。一人可同时在多个赛事中担任不同角色（赛事A是选手，赛事B是评委，赛事C是组织者）。**
+
+```
+组织者                                 受邀者                        公开端
+──────                                ────                         ────
+
+1. 创建赛事时设定：
+   - judging_mode = blind | open
+   - judging_deadline
+   - judging_tiebreaker
+
+2. 选手提交作品后，
+   在「我组织的比赛」→「作品」
+   看到 submitted 作品列表
+
+3. 点开作品详情
+   （截图/视频/README/hash链）
+
+4. 搜索平台账号 ──────────────→ 5. 收到邀请通知
+   GET /organizer/accounts            "你被邀请成为《赛事名》评审"
+   发送评审邀请                       点击「接受」→ 成为评委
+   POST /organizer/races/             点击「拒绝」→ 不参与
+   <id>/judge-invitations
+
+6. 分配评委到作品 ──────────────→ 7. 收到新评审任务通知
+   POST /organizer/races/            GET /judge/assignments
+   <id>/judge-assignments            （盲审：不显示 rider_name）
+
+                                  8. 打分 ────────────────→ 9. 排行榜实时更新
+                                     POST /judge/works/         GET /public/races/
+                                     <id>/judgments             <id>/leaderboard
+                                     （截止时间后锁定）          （实时计算排名）
+
+                           10. 查看评审汇总
+                               GET /organizer/races/
+                               <id>/judgments
+
+                           11. 发现违规 → 取消资格
+                               POST /organizer/works/
+                               <id>/disqualify
+
+                           12. 发奖
+                               POST /organizer/races/
+                               <id>/awards
+
+                           13. 结束赛事 → 所有评分锁定
+```
+
+- [ ] `judging_records` 建表：
+
 - [ ] `judging_records` 建表：
 
 ```sql
@@ -445,18 +537,95 @@ CREATE TABLE judge_assignments (
 );
 ```
 
-- [ ] `POST /api/v1/admin/races/<id>/judge-assignments` — 批量分配评委，需 `@require_role("admin")`
+- [ ] `GET /api/v1/organizer/accounts` — 搜索平台已有账号列表（用于评委邀请），需 `@require_role("organizer")`
+  - 支持 `?q=username&page=&per_page=` 搜索
+  - 返回 `{"accounts": [{"id": 1, "username": "...", "github_login": "..."}]}`
+
+**评委邀请（两步——组织者发邀请，受邀者接受后才成为评委）：**
+
+- [ ] `judge_invitations` 建表：
+
+```sql
+CREATE TABLE judge_invitations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    race_id INTEGER NOT NULL REFERENCES races(id),
+    invitee_user_id INTEGER NOT NULL REFERENCES users(id),
+    inviter_user_id INTEGER NOT NULL REFERENCES users(id),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'accepted', 'rejected')),
+    message TEXT DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    responded_at TEXT,
+    UNIQUE (race_id, invitee_user_id)
+);
+```
+
+- [ ] `POST /api/v1/organizer/races/<id>/judge-invitations` — 组织者发送评审邀请，需 `@require_managed_race`
+  - body: `{"invitee_user_id": 5, "message": "请帮忙评审这场比赛的作品"}`
+  - 校验 race.created_by_user_id == current_user_id
+  - 同一赛事同一受邀者不可重复邀请 → 409
+  - **发送通知**：`notification_service.send(invitee_user_id, "评审邀请", f"你被邀请成为《{race.name}》的评审", link=f"/judge-invitations")`
+  - 调用 `audit_log("judge.invite", ...)`
+- [ ] `GET /api/v1/judge-invitations` — 当前用户收到的评审邀请列表，需 `@require_auth`
+  - 返回 pending / accepted / rejected 分类
+- [ ] `POST /api/v1/judge-invitations/<id>/accept` — **接受邀请**，需 `@require_auth`
+  - 校验 `invitee_user_id == current_user_id`
+  - 当前用户没有 `judge` 角色 → 自动追加到 `roles` JSON 数组
+  - `status → accepted`，`responded_at = now`
+  - **发送通知给组织者**："{username} 已接受评审邀请"
+  - 调用 `audit_log("judge.invitation.accept", ...)`
+- [ ] `POST /api/v1/judge-invitations/<id>/reject` — **拒绝邀请**，需 `@require_auth`
+  - 校验 `invitee_user_id == current_user_id`
+  - `status → rejected`
+  - 调用 `audit_log("judge.invitation.reject", ...)`
+- [ ] `GET /api/v1/organizer/races/<id>/judge-invitations` — 组织者查看发出的邀请+状态，需 `@require_managed_race`
+
+**分配已接受邀请的评委到作品（需先接受邀请）：**
+
+- [ ] `POST /api/v1/organizer/races/<id>/judge-assignments` — 批量分配评委到作品，需 `@require_managed_race`
   - body: `{"assignments": [{"work_id": 1, "judge_user_id": 5}, ...]}`
-  - 校验 race.created_by_user_id == current_user_id（跨赛事隔离）
+  - 校验：`judge_user_id` 必须先已接受该赛事的评审邀请（存在 `accepted` 状态的 `judge_invitations` 记录），否则返回 422 "该用户尚未接受评审邀请"
+  - **自评防护**：校验 `judge_user_id` 不等于该 Work 的 owner → 422
+  - **发送通知**：`notification_service.send(judge_user_id, "新的评审任务", f"你被分配评审作品「{work.title}」", link=f"/judge/assignments")`
   - 调用 `audit_log("judge.assign", ...)`
-- [ ] `GET /api/v1/admin/races/<id>/judge-assignments` — 查看当前分配情况
-- [ ] `DELETE /api/v1/admin/judge-assignments/<id>` — 取消单条分配（评审尚未提交时）
-- [ ] `GET /api/v1/judge/assignments` — 评委查看自己的评审清单，需 `@require_role("judge")`，返回包含 Work 摘要 + Review Readiness 风险摘要
+- [ ] `GET /api/v1/organizer/races/<id>/judgments` — **查看全部评审结果汇总**，需 `@require_managed_race`
+  - 返回每个作品的评分汇总：各维度平均分、总分、已评/应评人数、评语列表
+  - 响应格式：
+  ```json
+  {
+    "works": [
+      {
+        "work_id": 1, "title": "作品A", "rider_name": "rider_a",
+        "judge_count": 3, "assigned_count": 3,
+        "scores": {
+          "technical_avg": 8.3, "innovation_avg": 7.0,
+          "presentation_avg": 9.0, "completeness_avg": 7.7,
+          "total_avg": 8.0
+        },
+        "comments": [
+          {"judge_name": "judge_1", "comment": "...", "total": 8.5},
+          {"judge_name": "judge_2", "comment": "...", "total": 7.5}
+        ]
+      }
+    ]
+  }
+  ```
+- [ ] `GET /api/v1/organizer/judgments/<id>` — 查看单条评审明细，需 `@require_managed_race`
+- [ ] `GET /api/v1/judge/assignments` — 评委查看自己的评审清单，需 `@require_role("judge")`
+  - 返回 Work 摘要 + Review Readiness 风险摘要
+  - **盲审**：`judging_mode='blind'` 时不返回 `rider_name` / `rider_user_id`，只返回作品内容
+  - **公开评审**：`judging_mode='open'` 时返回完整信息含作者名
 - [ ] `POST /api/v1/judge/works/<id>/judgments` — 提交四维评分 + 评语，需 `@require_role("judge")`
   - 校验评委已分配到该 Work
+  - **截止时间**：`judging_deadline` 已过且 race.status 不是 ended → 拒绝 422 "评分已截止"
   - 写入 `integrity_log`（event_type: `judgment.submit`）
   - 调用 `audit_log("judgment.submit", ...)`
-- [ ] `PUT /api/v1/judge/judgments/<id>` — 修改评分，需 `@require_role("judge")` + race.status 不是 ended
+
+**评审的权限边界（硬约束）：**
+- ✅ 评审可以：查看被分配的作品（含截图/视频/README）、提交评分、修改评分（截止前）
+- ❌ 评审不可以：修改作品的任何字段（title/description/repo/demo/截图等）、删除作品、修改作品可见性、查看非分配给自己的作品详情
+- 实现方式：评审的路由只注册 `@require_role("judge")`，作品的写路由只认 `@require_own_work`。评审没有 Work 的 owner 身份，`@require_own_work` 自动返回 404。
+- [ ] `PUT /api/v1/judge/judgments/<id>` — 修改评分，需 `@require_role("judge")`
+  - race.status = ended 或 judging_deadline 已过 → 拒绝 422
   - 写入 `integrity_log`（event_type: `judgment.update`）
   - 调用 `audit_log("judgment.update", ...)`
 - [ ] `trg_judgments_sealed` 触发器：
@@ -476,7 +645,21 @@ BEGIN
 END;
 ```
 
-### 2. 奖项与榜单
+### 2. 取消资格 + 奖项与榜单
+
+**作品违规处理：**
+
+- [ ] `works` 表增设：`disqualified INTEGER NOT NULL DEFAULT 0` + `disqualify_reason TEXT DEFAULT ''`
+- [ ] `POST /api/v1/organizer/works/<id>/disqualify` — 取消资格，需 `@require_managed_race`
+  - body: `{"reason": "违反比赛规则：使用了禁用工具"}`
+  - 调用 `audit_log("work.disqualify", ...)`
+- [ ] `POST /api/v1/organizer/works/<id>/restore` — 恢复资格（误判纠正），需 `@require_managed_race`
+- [ ] 被取消资格的作品：
+  - 评委仍可见评分记录但标注"已取消资格"
+  - 榜单中不出现
+  - 公开端不展示
+
+**奖项与榜单：**
 
 - [ ] `awards` 建表：
 
@@ -500,7 +683,44 @@ CREATE TABLE awards (
 - [ ] `PUT /api/v1/organizer/awards/<id>` — 编辑奖项，需校验 race ownership
 - [ ] `DELETE /api/v1/organizer/awards/<id>` — 删除奖项，需校验 race ownership + race.status 不能是 ended
 - [ ] `GET /api/v1/organizer/races/<id>/awards` — 管理奖项列表
-- [ ] `GET /api/v1/public/races/<id>/leaderboard` — 公开榜单 **无需认证**，按 `position` ASC 排列，返回奖项名 + 获奖者 username + 作品标题 + 总分
+- [ ] `GET /api/v1/public/races/<id>/leaderboard` — 公开榜单 **无需认证**，**实时计算、每次请求重新聚合评分数据**
+  - 排除 `disqualified=1` 的作品
+  - 按总分降序排列（总分 = 四维度得分按 `judging_tiebreaker` 规则计算后的值）
+  - 平局规则（由 Race.`judging_tiebreaker` 决定）：
+    - `avg` — 所有评委各维度均值再取平均（默认）
+    - `median` — 所有评委总分取中位数
+    - `trimmed_mean` — 去掉最高最低分后取平均
+  - 返回：
+  ```json
+  {
+    "race_id": 1,
+    "judging_mode": "blind",
+    "judging_tiebreaker": "avg",
+    "rankings": [
+      {
+        "rank": 1, "work_id": 3, "work_title": "作品A",
+        "rider_name": "rider_a",
+        "scores": {"technical": 8.5, "innovation": 7.0, "presentation": 9.0, "completeness": 8.0},
+        "total_score": 8.125,
+        "judge_count": 3,
+        "award_title": "第一名"
+      },
+      {
+        "rank": 2, "work_id": 7, "work_title": "作品B",
+        "rider_name": "rider_b",
+        "scores": {"technical": 7.0, "innovation": 8.5, "presentation": 7.0, "completeness": 7.5},
+        "total_score": 7.5,
+        "judge_count": 3,
+        "award_title": null
+      }
+    ],
+    "disqualified": [
+      {"work_id": 5, "work_title": "违规作品", "reason": "使用了禁用工具"}
+    ]
+  }
+  ```
+- [ ] 榜单在奖项创建前展示原始排名（award_title 为 null）；奖项创建后 association 到排名行
+- [ ] 奖项创建不改变排名计算，只关联展示
 
 ### 3. CSV 数据导出
 
@@ -776,23 +996,27 @@ tests/test_github_oauth.py                # OAuth 测试
 | 2 | 赛事详情（公开） | `GET /public/races/<id>` | 所有人 |
 | 3 | 登录/注册 | GitHub OAuth + `POST /auth/login` | 未登录 |
 | 4 | 个人中心 | `GET/PUT /auth/profile` | 已登录 |
-| 4a | ├ 通知中心 | `GET /notifications` + 铃铛 badge 显示未读数 + 标记已读 | 已登录 |
+| 4a | ├ 通知中心 | `GET /notifications` + 铃铛 badge 显示未读数 | 已登录 |
+| 4b | ├ 评审邀请 | `GET /judge-invitations` + 接受/拒绝 | 已登录 |
 | 5 | **「我组织的比赛」Tab** | `GET /organizer/races` — 显示 `created_by_user_id` 的赛事列表。空列表时展示"创建第一场赛事"引导 | **所有人可见**，内容由是否有已创建赛事决定 |
 | 5a | ├ 赛事管理（单赛事） | `PUT /organizer/races/<id>` + open/close/end | 该赛事创建者 |
 | 5b | ├ 报名管理 | `GET /organizer/races/<id>/registrations` + approve/reject | 该赛事创建者 |
 | 5c | ├ 作品查看 | `GET /organizer/races/<id>/works`（只读） | 该赛事创建者 |
 | 5d | ├ CA 数据查看 | `GET /organizer/races/<id>/ca-sessions` | 该赛事创建者 |
-| 5e | ├ 评委分配 | `POST /admin/races/<id>/judge-assignments` | admin |
-| 5f | ├ 奖项管理 | `POST /organizer/races/<id>/awards` | 该赛事创建者 |
-| 5g | ├ 导出 | `GET /organizer/races/<id>/export/*` | 该赛事创建者 |
-| 6 | **「我参与的比赛」Tab** | `GET /rider/registrations` — 显示报名记录。空列表时展示"浏览赛事并报名"引导 | **所有人可见**，内容由是否有报名记录决定 |
+| 5e | ├ 作品详情 | `GET /organizer/works/<id>`（截图/视频/README/hash链） | 该赛事创建者 |
+| 5f | ├ 选择评委 | `GET /organizer/accounts` 搜索 + `POST /organizer/races/<id>/judge-assignments` | 该赛事创建者 |
+| 5g | ├ 评审结果 | `GET /organizer/races/<id>/judgments`（汇总均分/总分/评语/已评人数） | 该赛事创建者 |
+| 5h | ├ 取消资格 | `POST /organizer/works/<id>/disqualify` | 该赛事创建者 |
+| 5i | ├ 奖项管理 | `POST /organizer/races/<id>/awards` | 该赛事创建者 |
+| 5j | ├ 导出 | `GET /organizer/races/<id>/export/*` | 该赛事创建者 |
+| 6 | **「我参与的比赛」Tab** | 两个子视图：<br>• 参赛身份：`GET /rider/registrations`<br>• 评审身份：`GET /judge-invitations`（已接受的） | **所有人可见**，内容由是否有报名/评审记录决定 |
 | 7 | 赛事报名 | `POST /rider/races/<id>/registrations` | 有 contestant 角色 |
 | 8 | RaceProject 工作区 | `GET /rider/race-projects/<id>` + CA 列表 + Timeline + Riding Coach | 该报名所属用户 |
 | 9 | CA 接入向导 | `GET /rider/race-projects/<id>/ca-wizard`（多步骤） | 该 RaceProject 所属用户 |
 | 10 | 作品提交/编辑 | Work CRUD + Review Readiness 检查 | 该 Work 所属用户 |
 | 11 | 作品详情（公开） | `GET /public/works/<id>` + `GET /public/works/<id>/integrity` | 所有人 |
 | 12 | 评审页（评委） | `GET /judge/assignments` + `POST /judge/works/<id>/judgments` | judge |
-| 13 | 榜单页 | `GET /public/races/<id>/leaderboard` | 所有人 |
+| 13 | 榜单页（实时公开） | `GET /public/races/<id>/leaderboard`（每次请求重新聚合，含平局规则） | 所有人 |
 | 14 | 骑手档案 | `GET /public/riders/<id>` | 所有人 |
 | 15 | Live Hall 大屏 | `GET /public/races/<id>/live` + `/live/entries` | 所有人 |
 
@@ -832,42 +1056,41 @@ tests/test_github_oauth.py                # OAuth 测试
 
 ```
 01. 数据库初始化验证
-02. 创建 admin 用户
-03. Organizer 登录 → 获取 token
-04. Organizer 创建赛事（含 submission_deadline + ca_policy）
+02. 创建 admin 用户、Organizer、Rider A、Rider B、Judge X、Judge Y
+03. Organizer 登录
+04. Organizer 创建赛事（ca_policy=rider_choice, judging_mode=blind, judging_tiebreaker=avg, submission_deadline, judging_deadline）
 05. Organizer 开放报名（open）
-06. Rider A 报名 → 通知：报名确认
+06. Rider A 报名 → 通知
 07. Rider A 重复报名 → 409
 08. Rider B 报名
-09. Rider A 查看自己的报名 → 200
-10. Rider B 尝试查看 Rider A 的报名 → 404
-11. Organizer 批准 Rider A → RaceProject 自动生成 → 通知：已批准
-12. Organizer 重新批准 Rider A → 幂等返回
-13. Organizer 拒绝 Rider B → 通知：已拒绝
-14. Rider A 查看 RaceProject + 通知列表
-15. Rider A 登记 CAConnection（organizer_specified 模式，只能选预设 CA）
-16. Rider A 创建作品（draft）→ 不触发完整性记录
-17. Rider A 编辑草稿 2 次
-18. Rider A 提交作品（submit）→ v1 hash 链生成
-19. Rider A 修改已提交作品（v2）→ hash 链更新
-20. Rider A CA 握手 → connected → 通知：CA 已连接
-21. Rider A CA 数据 Ingestion（3 条 Session）
-22. Organizer 截止报名（close → judging）→ 作品锁定
-23. Rider A 尝试编辑 locked 作品 → 422
-24. Admin 分配评委 → 通知：新评审任务
-25. Judge 查看通知 + 评审清单
-26. Judge 提交评分
-27. Judge 修改评分（judging 期间可改）
-28. Organizer 结束赛事（end）→ 评分锁定
-29. Judge 尝试再修改评分 → 422
-30. Organizer 创建奖项
-31. 查看公开榜单
-32. 查看 Live Hall
-33. 查看 Evidence Timeline
-34. 查看 Riding Coach 建议
-35. CSV 导出（无明文 content）
-36. 验证 Work hash 链完整性 → valid=true
-37. 模拟数据库篡改 → verify_resource_integrity 检测到断裂
+09. Organizer 批准 Rider A → RaceProject 生成 → 通知
+10. Organizer 拒绝 Rider B → 通知
+11. Rider A 查看 RaceProject
+12. Rider A 创建作品（draft）+ 上传截图/视频 → 编辑 2 次
+13. Rider A 提交作品（submit）→ v1 hash 链生成
+14. Rider A 修改已提交作品 → v2 hash 链更新
+15. Rider A 接入 CA + 握手 → connected
+16. Organizer 查看作品列表 + 点开详情（截图/视频/README）
+17. Organizer 搜索平台账号 → 选择 Judge X、Judge Y
+18. Organizer 发送评审邀请 → Judge X 收到通知
+19. Organizer 尝试分配未接受邀请的评委 → 422 "该用户尚未接受评审邀请"
+20. Judge X 查看评审邀请 → 点击接受 → 自动获得 judge 角色
+21. Judge Y 查看评审邀请 → 点击接受
+22. Organizer 分配评委（Judge X → Work A，Judge Y → Work A）
+23. Organizer 尝试把 Rider A 分配为评委 → 422 "不能评审自己的作品"
+24. Judge X 查看评审清单（盲审：看不到 rider_name）
+25. Judge X 提交评分
+26. Judge Y 提交评分
+27. Judge Y 修改评分（截止前）
+28. 榜单实时查询 → 排名自动计算
+29. Organizer 查看评审汇总
+26. Organizer 取消资格 Rider B 作品（如适用）
+27. judging_deadline 过后 → Judge X 尝试修改 → 422
+28. Organizer 结束赛事（end）→ 评分全部锁定
+29. Organizer 创建奖项（关联 Work A）
+30. 公开榜单 → 含奖项 title
+31. 验证 Work hash 链完整性 → valid=true
+32. 模拟数据库篡改 → verify_resource_integrity 检测到断裂
 ```
 
 - [ ] 安全验收：按 `require.md` 附录 10.1 的 12 项安全缺陷逐条复核，每项有通过/不通过结论
