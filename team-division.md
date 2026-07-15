@@ -316,7 +316,7 @@ CREATE TABLE works (
   - race.status 为 `draft/published/registration/running/submitting` 时可编辑
   - race.status 为 `judging/completed/archived` → 拒绝 UPDATE（触发器 `trg_works_sealed`）
 - [ ] `POST /api/v1/rider/works/<id>/submit` — **草稿提交为正式作品**，需 `@require_own_work`
-  - race.status 必须为 `submitting` 或 `judging`，否则返回 422
+  - race.status 必须为 `submitting`，否则返回 422；进入 `judging` 后禁止提交、重提、编辑和删除
   - 生成 v1 hash 链：`content_hash = SHA-256(all_fields)`
   - `content_commitment = HMAC-SHA-256(content_hash, SUBMISSION_SECRET)`
   - 写入 `integrity_log`（event_type: `work.submit`）
