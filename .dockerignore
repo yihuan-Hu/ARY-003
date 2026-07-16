@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+.eggs
+dist/
+build/
+
+# Virtual environments
+venv/
+.venv/
+env/
+
+# Tests
+backend/tests/
+backend/test_ary.db
+backend/demo_ary.db
+backend/demo_output.txt
+
+# Dev files
+*.zip
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+.env.production
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs (keep deployment.md in image via explicit COPY)
+docs/archive/
+docs/README.md
+
+# Design prototype (not needed in production)
+design-prototype/
+
+# CI
+.github/
+
+# Data
+*.db
+*.db-journal
+*.db-wal

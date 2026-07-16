@@ -1,0 +1,2139 @@
+openapi: "3.0.3"
+info:
+  title: ARY - Agent Racing Yard API
+  description: |
+    ARY 智能体骑行赛事平台 API 契约。
+    
+    ## 认证
+    
+    除公开端点外，所有 API 需要 `Authorization: Bearer <token>` 请求头。
+    Access token 有效期 1 小时，Refresh token 通过 httpOnly cookie 自动续期。
+    
+    ## 角色
+    
+    | 角色 | 说明 |
+    |------|------|
+    | `rider` | 参赛骑手，报名、提交作品 |
+    | `organizer` | 赛事组织者，管理赛事、审批报名 |
+    | `judge` | 评委，评审作品 |
+    | `admin` | 管理员，分配评委 |
+    
+    ## 错误响应格式
+    
+    ```json
+    { "error": "ErrorType", "message": "Human-readable description" }
+    ```
+    
+  version: "1.0.0"
+  contact:
+    name: ARY Team
+
+servers:
+  - url: http://localhost:5000
+    description: 本地开发
+  - url: https://your-domain.com
+    description: 生产环境
+
+tags:
+  - name: Auth
+    description: 认证与个人信息
+  - name: Public
+    description: 公开端点（无需认证）
+  - name: Rider
+    description: 骑手功能（需 rider 角色）
+  - name: Organizer
+    description: 组织者功能（需 organizer 角色）
+  - name: Judge
+    description: 评委功能（需 judge 角色）
+  - name: Admin
+    description: 管理员功能（需 admin 角色）
+  - name: Notifications
+    description: 系统通知（需认证）
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # ---- 通用 ----
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+
+    Pagination:
+      type: object
+      properties:
+        items:
+          type: array
+        total:
+          type: integer
+        page:
+          type: integer
+        per_page:
+          type: integer
+
+    # ---- Auth ----
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username:
+          type: string
+          minLength: 1
+        password:
+          type: string
+          minLength: 1
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT access token
+        user:
+          type: object
+          properties:
+            id:
+              type: integer
+            username:
+              type: string
+            roles:
+              type: array
+              items:
+                type: string
+
+    ProfileResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        github_login:
+          type: string
+        roles:
+          type: array
+          items:
+            type: string
+        profile_completed:
+          type: boolean
+        display_name:
+          type: string
+        school_org:
+          type: string
+        bio:
+          type: string
+
+    ProfileUpdateRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+        school_org:
+          type: string
+        bio:
+          type: string
+
+    # ---- Race ----
+    Race:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        status:
+          type: string
+          enum: [draft, published, registration, running, submitting, judging, completed, archived]
+        description:
+          type: string
+        rules:
+          type: string
+        schedule:
+          type: string
+        theme:
+          type: string
+        organizer_name:
+          type: string
+        start_time:
+          type: string
+          nullable: true
+        end_time:
+          type: string
+          nullable: true
+        submission_deadline:
+          type: string
+          nullable: true
+        judging_deadline:
+          type: string
+          nullable: true
+        judging_mode:
+          type: string
+          enum: [blind, open]
+        judging_tiebreaker:
+          type: string
+          enum: [avg, median, trimmed_mean]
+        ca_policy:
+          type: string
+          enum: [organizer_specified, rider_choice]
+        ca_policy_config:
+          type: string
+        created_by_user_id:
+          type: integer
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    RaceCreateRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        slug:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 5000
+        start_time:
+          type: string
+          nullable: true
+        end_time:
+          type: string
+          nullable: true
+        rules:
+          type: string
+        schedule:
+          type: string
+        theme:
+          type: string
+        organizer_name:
+          type: string
+        ca_policy:
+          type: string
+          enum: [organizer_specified, rider_choice]
+        ca_policy_config:
+          type: string
+        submission_deadline:
+          type: string
+          nullable: true
+        judging_deadline:
+          type: string
+          nullable: true
+        judging_mode:
+          type: string
+          enum: [blind, open]
+        judging_tiebreaker:
+          type: string
+          enum: [avg, median, trimmed_mean]
+
+    RaceDetail:
+      allOf:
+        - $ref: '#/components/schemas/Race'
+        - type: object
+          properties:
+            participant_count:
+              type: integer
+            public_work_count:
+              type: integer
+
+    RaceListResponse:
+      allOf:
+        - $ref: '#/components/schemas/Pagination'
+
+    # ---- Registration ----
+    Registration:
+      type: object
+      properties:
+        id:
+          type: integer
+        race_id:
+          type: integer
+        user_id:
+          type: integer
+        status:
+          type: string
+          enum: [submitted, approved, rejected, withdrawn]
+        submitted_at:
+          type: string
+        reviewed_at:
+          type: string
+          nullable: true
+        reviewed_by_user_id:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    # ---- RaceProject ----
+    RaceProject:
+      type: object
+      properties:
+        id:
+          type: integer
+        registration_id:
+          type: integer
+        aggregate_ingestion_status:
+          type: string
+        connection_health:
+          type: string
+        primary_work_id:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    # ---- Work ----
+    Work:
+      type: object
+      properties:
+        id:
+          type: integer
+        race_project_id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        repo_url:
+          type: string
+        demo_url:
+          type: string
+        video_url:
+          type: string
+        cover_image_url:
+          type: string
+        screenshot_urls:
+          type: string
+        readme_body:
+          type: string
+        work_status:
+          type: string
+          enum: [draft, submitted]
+        visibility:
+          type: string
+          enum: [private, public]
+        content_hash:
+          type: string
+        content_commitment:
+          type: string
+        prev_hash:
+          type: string
+          nullable: true
+        version:
+          type: integer
+        submitted_at:
+          type: string
+          nullable: true
+        disqualified:
+          type: integer
+        disqualify_reason:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    WorkCreateRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        description:
+          type: string
+          maxLength: 5000
+        repo_url:
+          type: string
+          maxLength: 500
+        demo_url:
+          type: string
+          maxLength: 500
+        video_url:
+          type: string
+          maxLength: 500
+        cover_image_url:
+          type: string
+          maxLength: 500
+        screenshot_urls:
+          type: string
+        readme_body:
+          type: string
+        visibility:
+          type: string
+          enum: [private, public]
+
+    # ---- Integrity ----
+    IntegrityResult:
+      type: object
+      properties:
+        resource_type:
+          type: string
+        resource_id:
+          type: integer
+        valid:
+          type: boolean
+        chain_length:
+          type: integer
+        first_hash:
+          type: string
+        last_hash:
+          type: string
+
+    # ---- Stats ----
+    PlatformStats:
+      type: object
+      properties:
+        total_races:
+          type: integer
+        active_races:
+          type: integer
+        total_riders:
+          type: integer
+        total_works:
+          type: integer
+
+    # ---- Announcement ----
+    Announcement:
+      type: object
+      properties:
+        id:
+          type: integer
+        race_id:
+          type: integer
+        title:
+          type: string
+        body:
+          type: string
+        visibility:
+          type: string
+          enum: [draft, private, public]
+        created_by_user_id:
+          type: integer
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    AnnouncementCreateRequest:
+      type: object
+      required: [title]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        body:
+          type: string
+          maxLength: 10000
+
+    # ---- Judgment ----
+    Judgment:
+      type: object
+      properties:
+        id:
+          type: integer
+        work_id:
+          type: integer
+        judge_user_id:
+          type: integer
+        technical_score:
+          type: integer
+          minimum: 1
+          maximum: 10
+        innovation_score:
+          type: integer
+          minimum: 1
+          maximum: 10
+        presentation_score:
+          type: integer
+          minimum: 1
+          maximum: 10
+        completeness_score:
+          type: integer
+          minimum: 1
+          maximum: 10
+        comment:
+          type: string
+          maxLength: 5000
+        submitted_at:
+          type: string
+        updated_at:
+          type: string
+
+    JudgmentSubmitRequest:
+      type: object
+      required: [technical_score, innovation_score, presentation_score, completeness_score]
+      properties:
+        technical_score:
+          type: integer
+          minimum: 1
+          maximum: 10
+        innovation_score:
+          type: integer
+          minimum: 1
+          maximum: 10
+        presentation_score:
+          type: integer
+          minimum: 1
+          maximum: 10
+        completeness_score:
+          type: integer
+          minimum: 1
+          maximum: 10
+        comment:
+          type: string
+          maxLength: 5000
+
+    # ---- Judge Assignment ----
+    JudgeAssignment:
+      type: object
+      properties:
+        id:
+          type: integer
+        race_id:
+          type: integer
+        work_id:
+          type: integer
+        judge_user_id:
+          type: integer
+        assigned_at:
+          type: string
+        updated_at:
+          type: string
+
+    JudgeAssignmentBatchRequest:
+      type: object
+      required: [assignments]
+      properties:
+        assignments:
+          type: array
+          minItems: 1
+          items:
+            type: object
+            required: [work_id, judge_user_id]
+            properties:
+              work_id:
+                type: integer
+              judge_user_id:
+                type: integer
+
+    # ---- Award ----
+    Award:
+      type: object
+      properties:
+        id:
+          type: integer
+        race_id:
+          type: integer
+        title:
+          type: string
+        position:
+          type: integer
+          minimum: 1
+        work_id:
+          type: integer
+          nullable: true
+        registration_id:
+          type: integer
+          nullable: true
+        description:
+          type: string
+        created_at:
+          type: string
+        updated_at:
+          type: string
+
+    AwardCreateRequest:
+      type: object
+      required: [title, position]
+      properties:
+        title:
+          type: string
+          minLength: 1
+          maxLength: 200
+        position:
+          type: integer
+          minimum: 1
+        work_id:
+          type: integer
+          nullable: true
+        registration_id:
+          type: integer
+          nullable: true
+        description:
+          type: string
+          maxLength: 1000
+
+    # ---- Leaderboard ----
+    LeaderboardEntry:
+      type: object
+      properties:
+        position:
+          type: integer
+        award_title:
+          type: string
+        rider_name:
+          type: string
+        work_title:
+          type: string
+        total_score:
+          type: number
+
+    # ---- Rider Profile ----
+    RiderProfile:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        display_name:
+          type: string
+        school_org:
+          type: string
+        bio:
+          type: string
+        profile_completed:
+          type: boolean
+        project_count:
+          type: integer
+        completion_rate:
+          type: number
+
+    # ---- Review Readiness ----
+    ReviewReadiness:
+      type: object
+      properties:
+        ready:
+          type: boolean
+        checks:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              passed:
+                type: boolean
+              detail:
+                type: string
+
+    # ---- Riding Coach ----
+    NextActions:
+      type: object
+      properties:
+        actions:
+          type: array
+          items:
+            type: object
+            properties:
+              priority:
+                type: string
+              action:
+                type: string
+              description:
+                type: string
+
+    # ---- Notification ----
+    Notification:
+      type: object
+      properties:
+        id:
+          type: integer
+        recipient_user_id:
+          type: integer
+        title:
+          type: string
+        body:
+          type: string
+        link:
+          type: string
+        is_read:
+          type: integer
+        created_at:
+          type: string
+
+    UnreadCount:
+      type: object
+      properties:
+        unread_count:
+          type: integer
+
+    # ---- Generic Success ----
+    Success:
+      type: object
+      properties:
+        data:
+          nullable: true
+        message:
+          type: string
+
+security:
+  - BearerAuth: []
+
+paths:
+  # ═══════════════════════════════════════════
+  # Auth
+  # ═══════════════════════════════════════════
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: 用户登录
+      description: |
+        本地用户名密码登录，返回 JWT access token + httpOnly refresh token cookie。
+        登录失败 5 次后触发 IP 级限流。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+          headers:
+            Set-Cookie:
+              schema:
+                type: string
+              description: refresh_token (httpOnly, SameSite=Strict, max-age=7d)
+        '401':
+          description: 用户名或密码错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '429':
+          description: 登录限流
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /api/v1/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: 刷新 access token
+      description: 使用 httpOnly cookie 中的 refresh token 换取新的 access token
+      security: []
+      responses:
+        '200':
+          description: Token 刷新成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      token:
+                        type: string
+        '401':
+          description: Refresh token 无效或过期
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: 登出
+      description: Access token 加入黑名单，清除 refresh token cookie
+      responses:
+        '200':
+          description: 登出成功
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: 获取当前用户信息
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id:
+                        type: integer
+                      username:
+                        type: string
+                      roles:
+                        type: array
+                        items:
+                          type: string
+
+  /api/v1/auth/profile:
+    get:
+      tags: [Auth]
+      summary: 查看个人信息
+      responses:
+        '200':
+          description: 个人信息
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/ProfileResponse'
+    put:
+      tags: [Auth]
+      summary: 完善个人信息
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProfileUpdateRequest'
+      responses:
+        '200':
+          description: 更新成功
+
+  # ═══════════════════════════════════════════
+  # Public
+  # ═══════════════════════════════════════════
+  /api/v1/public/races:
+    get:
+      tags: [Public]
+      summary: 公开赛事列表
+      description: 分页查询公开赛事，支持状态筛选和关键词搜索
+      security: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [published, registration, running, submitting, judging, completed, archived]
+        - name: q
+          in: query
+          schema:
+            type: string
+          description: 关键词搜索（匹配赛事名称）
+      responses:
+        '200':
+          description: 赛事列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RaceListResponse'
+
+  /api/v1/public/races/{race_id}:
+    get:
+      tags: [Public]
+      summary: 公开赛事详情
+      security: []
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 赛事详情（含参与人数和作品数）
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RaceDetail'
+        '404':
+          description: 赛事不存在或为草稿
+
+  /api/v1/public/races/{race_id}/works:
+    get:
+      tags: [Public]
+      summary: 公开作品列表
+      security: []
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 作品列表
+
+  /api/v1/public/stats:
+    get:
+      tags: [Public]
+      summary: 平台全局统计
+      security: []
+      responses:
+        '200':
+          description: 平台统计
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/PlatformStats'
+
+  /api/v1/public/works/{work_id}/integrity:
+    get:
+      tags: [Public]
+      summary: 公开验证作品 hash 链完整性
+      security: []
+      parameters:
+        - name: work_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Hash 链验证结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/IntegrityResult'
+
+  /api/v1/public/races/{race_id}/announcements:
+    get:
+      tags: [Public]
+      summary: 公开公告列表
+      security: []
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 公告列表
+
+  /api/v1/public/races/{race_id}/leaderboard:
+    get:
+      tags: [Public]
+      summary: 公开榜单
+      security: []
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 榜单数据
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/LeaderboardEntry'
+
+  /api/v1/public/riders/{user_id}:
+    get:
+      tags: [Public]
+      summary: 公开骑手档案
+      security: []
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 骑手档案
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/RiderProfile'
+
+  /api/v1/public/races/{race_id}/live:
+    get:
+      tags: [Public]
+      summary: Live Hall 实时聚合
+      description: |
+        实时聚合赛事数据：活跃 CA 数、CA 分布、平均进度、风险分布。
+        替代已废弃的 /api/jumbotron/snapshot。
+      security: []
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Live Hall 聚合数据
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      name:
+                        type: string
+                      status:
+                        type: string
+                      active_ca_count:
+                        type: integer
+                      entry_count:
+                        type: integer
+                      avg_progress:
+                        type: number
+                      ca_distribution:
+                        type: object
+                        additionalProperties:
+                          type: integer
+                      risk_distribution:
+                        type: object
+                        properties:
+                          high:
+                            type: integer
+                          medium:
+                            type: integer
+                          low:
+                            type: integer
+
+  /api/v1/public/races/{race_id}/live/entries:
+    get:
+      tags: [Public]
+      summary: Live Hall 参赛者实时列表
+      description: 参赛者实时进度列表，包含进度百分比和风险等级
+      security: []
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 参赛者列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rider_id:
+                          type: integer
+                        rider_name:
+                          type: string
+                        display_name:
+                          type: string
+                        position:
+                          type: integer
+                        progress:
+                          type: number
+                        risk_level:
+                          type: string
+                          enum: [low, medium, high]
+
+  # ═══════════════════════════════════════════
+  # Rider
+  # ═══════════════════════════════════════════
+  /api/v1/rider/races/{race_id}/registrations:
+    post:
+      tags: [Rider]
+      summary: 报名参赛
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '201':
+          description: 报名成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/Registration'
+        '409':
+          description: 重复报名
+
+  /api/v1/rider/registrations:
+    get:
+      tags: [Rider]
+      summary: 我的报名列表
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 报名列表
+
+  /api/v1/rider/races:
+    get:
+      tags: [Rider]
+      summary: 我报名过的赛事列表
+      responses:
+        '200':
+          description: 赛事列表
+
+  /api/v1/rider/registrations/{registration_id}:
+    get:
+      tags: [Rider]
+      summary: 查看报名详情
+      parameters:
+        - name: registration_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 报名详情
+        '404':
+          description: 不是你的报名
+
+  /api/v1/rider/registrations/{registration_id}/withdraw:
+    post:
+      tags: [Rider]
+      summary: 退赛
+      parameters:
+        - name: registration_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 退赛成功
+
+  /api/v1/rider/race-projects/{race_project_id}:
+    get:
+      tags: [Rider]
+      summary: 查看 RaceProject 工作区
+      parameters:
+        - name: race_project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 工作区信息（含 CA 连接占位）
+
+  /api/v1/rider/race-projects/{race_project_id}/next-actions:
+    get:
+      tags: [Rider]
+      summary: Riding Coach 建议
+      parameters:
+        - name: race_project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 下一步建议
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/NextActions'
+
+  /api/v1/rider/race-projects/{race_project_id}/works:
+    post:
+      tags: [Rider]
+      summary: 创建作品草稿
+      parameters:
+        - name: race_project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkCreateRequest'
+      responses:
+        '201':
+          description: 创建成功
+    get:
+      tags: [Rider]
+      summary: 查看作品列表
+      parameters:
+        - name: race_project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 作品列表
+
+  /api/v1/rider/works/{work_id}:
+    put:
+      tags: [Rider]
+      summary: 编辑作品
+      parameters:
+        - name: work_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkCreateRequest'
+      responses:
+        '200':
+          description: 更新成功
+    delete:
+      tags: [Rider]
+      summary: 删除作品
+      parameters:
+        - name: work_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+
+  /api/v1/rider/works/{work_id}/submit:
+    post:
+      tags: [Rider]
+      summary: 提交作品
+      parameters:
+        - name: work_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 提交成功
+
+  /api/v1/rider/race-projects/{race_project_id}/review-readiness:
+    get:
+      tags: [Rider]
+      summary: 查看评审准备度
+      parameters:
+        - name: race_project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 准备度检查结果
+
+  /api/v1/rider/race-projects/{race_project_id}/ca-policy:
+    get:
+      tags: [Rider]
+      summary: 查询 CA 策略
+      description: 返回赛事当前的 CA 策略配置（rider_choice 或 organizer_specified）
+      parameters:
+        - name: race_project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: CA 策略信息
+
+  /api/v1/rider/race-projects/{race_project_id}/ca-wizard:
+    get:
+      tags: [Rider]
+      summary: CA 接入向导
+      description: |
+        根据 ca_policy 返回不同流程的向导数据：
+        - rider_choice: 返回可用的 CA 类型列表和配置模板
+        - organizer_specified: 返回白名单 CA 类型和必填配置字段
+      parameters:
+        - name: race_project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 向导步骤数据
+
+  /api/v1/rider/race-projects/{race_project_id}/ca-connections:
+    post:
+      tags: [Rider]
+      summary: 登记 CA 接入
+      description: 若 organizer_specified 模式，校验 ca_type 在白名单内且 config 包含必填字段
+      parameters:
+        - name: race_project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ca_type]
+              properties:
+                ca_type:
+                  type: string
+                api_endpoint:
+                  type: string
+                api_key:
+                  type: string
+                config:
+                  type: object
+      responses:
+        '201':
+          description: CA 接入登记成功
+    get:
+      tags: [Rider]
+      summary: 查看已登记 CA 列表
+      parameters:
+        - name: race_project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: CA 连接列表
+
+  /api/v1/rider/ca-connections/{ca_connection_id}:
+    put:
+      tags: [Rider]
+      summary: 更新 CA 配置
+      parameters:
+        - name: ca_connection_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 更新成功
+    delete:
+      tags: [Rider]
+      summary: 移除 CA 连接
+      parameters:
+        - name: ca_connection_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+
+  /api/v1/rider/ca-connections/{ca_connection_id}/handshake:
+    post:
+      tags: [Rider]
+      summary: CA 握手验证
+      description: 验证 CA 连接是否可用，返回连接状态和错误原因
+      parameters:
+        - name: ca_connection_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 握手结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      success:
+                        type: boolean
+                      message:
+                        type: string
+                      error_type:
+                        type: string
+                        enum: [not_configured, auth_failed, permission_denied, timeout, invalid_format]
+
+  /api/v1/rider/race-projects/{race_project_id}/timeline:
+    get:
+      tags: [Rider]
+      summary: Evidence Timeline 证据时间线
+      description: |
+        聚合关键事件：报名批准、CA 握手、Session ingest、作品提交、评审提交、获奖。
+        不暴露原始 CA Session 数据。
+      parameters:
+        - name: race_project_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 时间线事件列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        event_type:
+                          type: string
+                        timestamp:
+                          type: string
+                        summary:
+                          type: string
+
+  /api/v1/rider/profile:
+    get:
+      tags: [Rider]
+      summary: 骑手完整档案（含非公开作品）
+      responses:
+        '200':
+          description: 完整档案
+
+  # ═══════════════════════════════════════════
+  # Organizer
+  # ═══════════════════════════════════════════
+  /api/v1/organizer/races:
+    post:
+      tags: [Organizer]
+      summary: 创建赛事
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RaceCreateRequest'
+      responses:
+        '201':
+          description: 创建成功
+    get:
+      tags: [Organizer]
+      summary: 我管理的赛事列表
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 赛事列表
+
+  /api/v1/organizer/races/{race_id}:
+    get:
+      tags: [Organizer]
+      summary: 查看赛事详情
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 赛事详情
+    put:
+      tags: [Organizer]
+      summary: 编辑赛事
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RaceCreateRequest'
+      responses:
+        '200':
+          description: 更新成功
+
+  /api/v1/organizer/races/{race_id}/publish:
+    post:
+      tags: [Organizer]
+      summary: 发布赛事（draft → published）
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 发布成功
+
+  /api/v1/organizer/races/{race_id}/open-registration:
+    post:
+      tags: [Organizer]
+      summary: 开放报名（published → registration）
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 操作成功
+
+  /api/v1/organizer/races/{race_id}/start:
+    post:
+      tags: [Organizer]
+      summary: 开始赛事（registration → running）
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 操作成功
+
+  /api/v1/organizer/races/{race_id}/open-submissions:
+    post:
+      tags: [Organizer]
+      summary: 开放作品提交（running → submitting）
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 操作成功
+
+  /api/v1/organizer/races/{race_id}/start-judging:
+    post:
+      tags: [Organizer]
+      summary: 开始评审（submitting → judging）
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 操作成功
+
+  /api/v1/organizer/races/{race_id}/complete:
+    post:
+      tags: [Organizer]
+      summary: 结束赛事（judging → completed）
+      description: 评分锁定，不可再修改
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 操作成功
+
+  /api/v1/organizer/races/{race_id}/archive:
+    post:
+      tags: [Organizer]
+      summary: 归档赛事（completed → archived）
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 操作成功
+
+  /api/v1/organizer/races/{race_id}/registrations:
+    get:
+      tags: [Organizer]
+      summary: 查看赛事报名列表
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+        - name: status
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 报名列表
+
+  /api/v1/organizer/registrations/{registration_id}/approve:
+    post:
+      tags: [Organizer]
+      summary: 批准报名
+      description: 批准后自动创建 RaceProject
+      parameters:
+        - name: registration_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 批准成功
+
+  /api/v1/organizer/registrations/{registration_id}/reject:
+    post:
+      tags: [Organizer]
+      summary: 拒绝报名
+      parameters:
+        - name: registration_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 拒绝成功
+
+  /api/v1/organizer/races/{race_id}/race-projects:
+    get:
+      tags: [Organizer]
+      summary: 查看赛事 RaceProjects 列表
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: RaceProjects 列表
+
+  /api/v1/organizer/races/{race_id}/works:
+    get:
+      tags: [Organizer]
+      summary: 查看赛事作品列表
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 作品列表
+
+  /api/v1/organizer/works/{work_id}:
+    get:
+      tags: [Organizer]
+      summary: 查看作品详情（含 hash 链完整性）
+      parameters:
+        - name: work_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 作品详情 + 完整性
+
+  /api/v1/organizer/races/{race_id}/announcements:
+    post:
+      tags: [Organizer]
+      summary: 创建公告
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementCreateRequest'
+      responses:
+        '201':
+          description: 创建成功
+    get:
+      tags: [Organizer]
+      summary: 查看公告列表（含私有公告）
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 公告列表
+
+  /api/v1/organizer/announcements/{announcement_id}:
+    put:
+      tags: [Organizer]
+      summary: 编辑公告
+      parameters:
+        - name: announcement_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnouncementCreateRequest'
+      responses:
+        '200':
+          description: 更新成功
+    delete:
+      tags: [Organizer]
+      summary: 删除公告
+      parameters:
+        - name: announcement_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+
+  /api/v1/organizer/announcements/{announcement_id}/publish:
+    post:
+      tags: [Organizer]
+      summary: 发布公告（设为公开）
+      parameters:
+        - name: announcement_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 操作成功
+
+  /api/v1/organizer/announcements/{announcement_id}/hide:
+    post:
+      tags: [Organizer]
+      summary: 隐藏公告
+      parameters:
+        - name: announcement_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 操作成功
+
+  /api/v1/organizer/races/{race_id}/awards:
+    post:
+      tags: [Organizer]
+      summary: 创建奖项
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AwardCreateRequest'
+      responses:
+        '201':
+          description: 创建成功
+    get:
+      tags: [Organizer]
+      summary: 查看奖项列表
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 奖项列表
+
+  /api/v1/organizer/awards/{award_id}:
+    put:
+      tags: [Organizer]
+      summary: 编辑奖项
+      parameters:
+        - name: award_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AwardCreateRequest'
+      responses:
+        '200':
+          description: 更新成功
+    delete:
+      tags: [Organizer]
+      summary: 删除奖项
+      parameters:
+        - name: award_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 删除成功
+
+  /api/v1/organizer/races/{race_id}/export/registrations:
+    get:
+      tags: [Organizer]
+      summary: 导出报名数据 CSV
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: CSV 文件
+          content:
+            text/csv:
+              schema:
+                type: string
+
+  /api/v1/organizer/races/{race_id}/export/judgments:
+    get:
+      tags: [Organizer]
+      summary: 导出评审结果 CSV
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: CSV 文件
+
+  /api/v1/organizer/races/{race_id}/export/works:
+    get:
+      tags: [Organizer]
+      summary: 导出作品列表 CSV
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: CSV 文件
+
+  /api/v1/organizer/races/{race_id}/review-readiness:
+    get:
+      tags: [Organizer]
+      summary: 查看全场评审准备度摘要
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 准备度摘要
+
+  # ═══════════════════════════════════════════
+  # Judge
+  # ═══════════════════════════════════════════
+  /api/v1/judge/assignments:
+    get:
+      tags: [Judge]
+      summary: 评委评审清单
+      description: 含 Work 摘要 + Review Readiness 风险摘要
+      responses:
+        '200':
+          description: 评审清单
+
+  /api/v1/judge/works/{work_id}/judgments:
+    post:
+      tags: [Judge]
+      summary: 提交四维评分
+      parameters:
+        - name: work_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JudgmentSubmitRequest'
+      responses:
+        '201':
+          description: 提交成功
+
+  /api/v1/judge/judgments/{judgment_id}:
+    put:
+      tags: [Judge]
+      summary: 修改评分
+      description: 赛事结束后不可修改（403）
+      parameters:
+        - name: judgment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JudgmentSubmitRequest'
+      responses:
+        '200':
+          description: 修改成功
+        '403':
+          description: 赛事已结束，评分已锁定
+    get:
+      tags: [Judge]
+      summary: 查看评分详情
+      parameters:
+        - name: judgment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 评分详情
+
+  # ═══════════════════════════════════════════
+  # Admin
+  # ═══════════════════════════════════════════
+  /api/v1/admin/races/{race_id}/judge-assignments:
+    post:
+      tags: [Admin]
+      summary: 批量分配评委
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JudgeAssignmentBatchRequest'
+      responses:
+        '201':
+          description: 分配成功
+    get:
+      tags: [Admin]
+      summary: 查看评委分配情况
+      parameters:
+        - name: race_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 分配列表
+
+  /api/v1/admin/judge-assignments/{assignment_id}:
+    delete:
+      tags: [Admin]
+      summary: 取消评委分配
+      parameters:
+        - name: assignment_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 取消成功
+
+  # ═══════════════════════════════════════════
+  # Notifications
+  # ═══════════════════════════════════════════
+  /api/v1/notifications:
+    get:
+      tags: [Notifications]
+      summary: 获取通知列表
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 通知列表
+
+  /api/v1/notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: 未读通知数量
+      responses:
+        '200':
+          description: 未读数
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    $ref: '#/components/schemas/UnreadCount'
+
+  /api/v1/notifications/{notification_id}/read:
+    put:
+      tags: [Notifications]
+      summary: 标记通知为已读
+      parameters:
+        - name: notification_id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 操作成功
+
+  /api/v1/notifications/read-all:
+    put:
+      tags: [Notifications]
+      summary: 全部标记为已读
+      responses:
+        '200':
+          description: 操作成功
+
+  # ═══════════════════════════════════════════
+  # Health
+  # ═══════════════════════════════════════════
+  /health:
+    get:
+      tags: [Public]
+      summary: 健康检查
+      security: []
+      responses:
+        '200':
+          description: 服务正常
+
+  /health/ready:
+    get:
+      tags: [Public]
+      summary: 就绪检查（含数据库连通性）
+      security: []
+      responses:
+        '200':
+          description: 就绪
