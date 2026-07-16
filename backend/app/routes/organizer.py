@@ -6,6 +6,8 @@ from app.services.race_service import RaceService
 from app.services.announcement_service import AnnouncementService
 from app.services.award_service import AwardService
 from app.services.readiness_service import ReviewReadinessService
+from app.services.report_service import ReportService
+from app.services.judging_service import JudgingService
 from app.dao.race_dao import RaceDAO
 from app.dao.work_dao import WorkDAO
 from app.dao.judging_dao import JudgingRecordDAO, JudgeAssignmentDAO
@@ -43,6 +45,8 @@ announcement_service = AnnouncementService()
 announcement_dao = AnnouncementDAO()
 award_service = AwardService()
 readiness_service = ReviewReadinessService()
+report_service = ReportService()
+judging_service = JudgingService()
 judgment_dao = JudgingRecordDAO()
 assignment_dao = JudgeAssignmentDAO()
 registration_dao = RegistrationDAO()
@@ -539,3 +543,82 @@ def get_organizer_readiness(race_id):
             ).fetchone()
             summary["username"] = user["username"] if user else None
     return success(result)
+
+
+# =============================================
+# 人员 C：评审结果汇总
+# =============================================
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/judgments",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def summarize_judgments(race_id):
+    """Organizer 查看赛事评审汇总（排名 + 评分详情）"""
+    result = judging_service.summarize_judgments(race_id, g.current_user_id)
+    return success(result)
+
+
+# =============================================
+# 人员 C：Report 模块
+# =============================================
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/report",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def get_race_report(race_id):
+    """赛事整体报告"""
+    body = report_service.generate_race_report(race_id, g.current_user_id)
+    saved = report_service.save_report(
+        "race_report", g.current_user_id, race_id,
+        f"Race Report - {body['race_name']}", body,
+    )
+    return success({"report": body, "saved_id": saved["id"]})
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/review-summary",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def get_review_summary(race_id):
+    """评审汇总快照"""
+    body = report_service.generate_review_summary(race_id, g.current_user_id)
+    saved = report_service.save_report(
+        "review_summary", g.current_user_id, race_id,
+        f"Review Summary - {body['race_name']}", body,
+    )
+    return success({"report": body, "saved_id": saved["id"]})
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/reports",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+def list_my_reports():
+    """查看自己生成的报告列表"""
+    return success(report_service.get_reports_by_user(g.current_user_id))
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/reports/<int:report_id>",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+def get_report(report_id):
+    """获取单个报告详情"""
+    return success(report_service.get_report(report_id, g.current_user_id))

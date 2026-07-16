@@ -547,6 +547,45 @@ def init_db(app=None):
         )
     """)
 
+    # =============================================
+    # 人员 C：评委邀请系统（两步制）
+    # =============================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS judge_invitations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_id INTEGER NOT NULL REFERENCES races(id),
+            judge_user_id INTEGER NOT NULL REFERENCES users(id),
+            status TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending', 'accepted', 'rejected')),
+            invited_by_user_id INTEGER NOT NULL REFERENCES users(id),
+            message TEXT DEFAULT '',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE (race_id, judge_user_id)
+        )
+    """)
+
+    # =============================================
+    # 人员 C：Report 模块
+    # =============================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS reports (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            report_type TEXT NOT NULL
+                CHECK (report_type IN ('rider_report', 'race_report', 'review_summary')),
+            owner_user_id INTEGER NOT NULL REFERENCES users(id),
+            race_id INTEGER REFERENCES races(id),
+            title TEXT NOT NULL,
+            summary TEXT DEFAULT '',
+            body_json TEXT DEFAULT '{}',
+            generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
     conn.commit()
     conn.execute("PRAGMA foreign_keys=ON")
 

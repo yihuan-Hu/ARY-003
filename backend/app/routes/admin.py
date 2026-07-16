@@ -1,7 +1,7 @@
 """
 人员 C：管理后台路由（Admin 蓝图）
 
-提供评委分配（批量 + 查看 + 取消）。
+提供评委邀请 + 分配（批量 + 查看 + 取消）。
 """
 from flask import Blueprint, g, request
 
@@ -19,6 +19,46 @@ judging_service = JudgingService()
 assignment_dao = JudgeAssignmentDAO()
 
 
+# =============================================
+# 评委邀请（两步制：邀请 → 接受/拒绝 → 分配）
+# =============================================
+
+
+@admin_bp.route(
+    "/api/v1/admin/races/<int:race_id>/judge-invitations",
+    methods=["POST"],
+)
+@require_auth
+@require_role("admin")
+def invite_judge(race_id):
+    """邀请评委加入赛事"""
+    body = request.get_json(silent=True) or {}
+    judge_user_id = body.get("judge_user_id")
+    message = body.get("message", "")
+    if not judge_user_id:
+        raise ValidationError("judge_user_id is required")
+    result = judging_service.invite_judge(
+        race_id, int(judge_user_id), g.current_user_id, message
+    )
+    return created(result)
+
+
+@admin_bp.route(
+    "/api/v1/admin/races/<int:race_id>/judge-invitations",
+    methods=["GET"],
+)
+@require_auth
+@require_role("admin")
+def list_judge_invitations(race_id):
+    """查看赛事的所有评委邀请"""
+    return success(judging_service.list_invitations(race_id, g.current_user_id))
+
+
+# =============================================
+# 评委分配
+# =============================================
+
+
 @admin_bp.route(
     "/api/v1/admin/races/<int:race_id>/judge-assignments",
     methods=["POST"],
@@ -27,10 +67,9 @@ assignment_dao = JudgeAssignmentDAO()
 @require_role("admin")
 @validate(JudgeAssignmentBatchSchema())
 def batch_assign_judges(race_id):
-    """批量分配评委"""
+    """批量分配评委（仅已接受邀请的评委可被分配）"""
     body = g.validated_body
     assignments = body["assignments"]
-    # 转换格式：[{"work_id": 1, "judge_user_id": 5}, ...]
     normalized = []
     for item in assignments:
         if "work_id" not in item or "judge_user_id" not in item:

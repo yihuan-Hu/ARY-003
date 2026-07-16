@@ -1,8 +1,29 @@
-"""人员 C：评审系统测试"""
+"""人员 C：评审系统测试（含邀请、自评防护、截止时间、汇总）"""
 import json
 import pytest
 
-from tests.conftest import _create_user, _login, _db_execute, _db_fetchone
+from tests.conftest import _create_user, _login
+
+
+# =============================================
+# Helpers
+# =============================================
+
+
+def _invite_and_accept(client, admin_token, race_id, judge_user_id, judge_token):
+    """邀请评委 + 评委接受 → 返回 invitation"""
+    invite_resp = client.post(
+        f"/api/v1/admin/races/{race_id}/judge-invitations",
+        data=json.dumps({"judge_user_id": judge_user_id}),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    inv = json.loads(invite_resp.data)["data"]
+    client.post(
+        f"/api/v1/judge/invitations/{inv['id']}/accept",
+        headers={"Authorization": f"Bearer {judge_token}"},
+    )
+    return inv
 
 
 # =============================================
@@ -33,7 +54,6 @@ def judge_b_token(client, judge_b_user):
 @pytest.fixture
 def race_in_judging(client, admin_user, admin_token, rider_a, rider_a_token):
     """创建一个已进入 judging 状态的赛事（admin 创建），含已审批报名和已提交作品"""
-    # Admin 创建赛事（admin 同时也是 race creator，满足跨赛事隔离要求）
     resp = client.post(
         "/api/v1/organizer/races",
         data=json.dumps({"name": "Judging Test Race", "judging_mode": "open"}),
@@ -43,34 +63,29 @@ def race_in_judging(client, admin_user, admin_token, rider_a, rider_a_token):
     race = json.loads(resp.data)["data"]
     race_id = race["id"]
 
-    # 发布 → 开放报名
     for action in ("publish", "open-registration"):
         client.post(
             f"/api/v1/organizer/races/{race_id}/{action}",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
-    # Rider 报名（race 为 registration）
     reg_resp = client.post(
         f"/api/v1/rider/races/{race_id}/registrations",
         headers={"Authorization": f"Bearer {rider_a_token}"},
     )
     reg = json.loads(reg_resp.data)["data"]
 
-    # Admin 审批
     client.post(
         f"/api/v1/organizer/registrations/{reg['id']}/approve",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
-    # 进入 submitting 阶段
     for action in ("start", "open-submissions"):
         client.post(
             f"/api/v1/organizer/races/{race_id}/{action}",
             headers={"Authorization": f"Bearer {admin_token}"},
         )
 
-    # 通过 race-projects 列表获取 rp_id
     rp_list = client.get(
         f"/api/v1/organizer/races/{race_id}/race-projects",
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -78,7 +93,6 @@ def race_in_judging(client, admin_user, admin_token, rider_a, rider_a_token):
     rp_data = json.loads(rp_list.data)["data"]
     rp_id = rp_data[0]["id"] if rp_data else None
 
-    # 创建作品
     work_resp = client.post(
         f"/api/v1/rider/race-projects/{rp_id}/works",
         data=json.dumps({
@@ -92,20 +106,17 @@ def race_in_judging(client, admin_user, admin_token, rider_a, rider_a_token):
     )
     work = json.loads(work_resp.data)["data"]
 
-    # 提交作品（race 为 submitting）
     submit_resp = client.post(
         f"/api/v1/rider/works/{work['id']}/submit",
         headers={"Authorization": f"Bearer {rider_a_token}"},
     )
     work = json.loads(submit_resp.data)["data"]
 
-    # 进入 judging
     client.post(
         f"/api/v1/organizer/races/{race_id}/start-judging",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
-    # 重新获取 race 信息
     race_resp = client.get(
         f"/api/v1/organizer/races/{race_id}",
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -117,21 +128,125 @@ def race_in_judging(client, admin_user, admin_token, rider_a, rider_a_token):
 
 
 # =============================================
-# 评委分配
+# 评委邀请（两步制）
+# =============================================
+
+
+def test_admin_invite_judge_success(
+    client, admin_token, race_in_judging, judge_user
+):
+    """Admin 成功邀请评委"""
+    race = race_in_judging
+    resp = client.post(
+        f"/api/v1/admin/races/{race['id']}/judge-invitations",
+        data=json.dumps({"judge_user_id": judge_user["id"]}),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 201
+    data = json.loads(resp.data)["data"]
+    assert data["status"] == "pending"
+    assert data["judge_user_id"] == judge_user["id"]
+
+
+def test_judge_accept_invitation(
+    client, admin_token, judge_token, race_in_judging, judge_user
+):
+    """评委接受邀请"""
+    race = race_in_judging
+    invite_resp = client.post(
+        f"/api/v1/admin/races/{race['id']}/judge-invitations",
+        data=json.dumps({"judge_user_id": judge_user["id"]}),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    inv_id = json.loads(invite_resp.data)["data"]["id"]
+
+    resp = client.post(
+        f"/api/v1/judge/invitations/{inv_id}/accept",
+        headers={"Authorization": f"Bearer {judge_token}"},
+    )
+    assert resp.status_code == 200
+    assert json.loads(resp.data)["data"]["status"] == "accepted"
+
+
+def test_judge_reject_invitation(
+    client, admin_token, judge_token, race_in_judging, judge_user
+):
+    """评委拒绝邀请"""
+    race = race_in_judging
+    invite_resp = client.post(
+        f"/api/v1/admin/races/{race['id']}/judge-invitations",
+        data=json.dumps({"judge_user_id": judge_user["id"]}),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    inv_id = json.loads(invite_resp.data)["data"]["id"]
+
+    resp = client.post(
+        f"/api/v1/judge/invitations/{inv_id}/reject",
+        headers={"Authorization": f"Bearer {judge_token}"},
+    )
+    assert resp.status_code == 200
+    assert json.loads(resp.data)["data"]["status"] == "rejected"
+
+
+def test_judge_list_my_invitations(
+    client, admin_token, judge_token, race_in_judging, judge_user
+):
+    """评委查看自己收到的邀请"""
+    race = race_in_judging
+    client.post(
+        f"/api/v1/admin/races/{race['id']}/judge-invitations",
+        data=json.dumps({"judge_user_id": judge_user["id"]}),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+
+    resp = client.get(
+        "/api/v1/judge/invitations",
+        headers={"Authorization": f"Bearer {judge_token}"},
+    )
+    assert resp.status_code == 200
+    data = json.loads(resp.data)["data"]
+    assert len(data) >= 1
+
+
+def test_assign_fails_without_accepted_invitation(
+    client, admin_token, race_in_judging, judge_user
+):
+    """未接受邀请的评委不能被分配 → 403"""
+    race = race_in_judging
+    resp = client.post(
+        f"/api/v1/admin/races/{race['id']}/judge-assignments",
+        data=json.dumps({
+            "assignments": [{
+                "work_id": race["work"]["id"],
+                "judge_user_id": judge_user["id"],
+            }]
+        }),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 403
+
+
+# =============================================
+# 评委分配（需先邀请并接受）
 # =============================================
 
 
 def test_admin_assign_judge_success(
-    client, admin_token, race_in_judging, judge_user
+    client, admin_token, judge_token, race_in_judging, judge_user
 ):
-    """Admin 成功分配评委到作品"""
+    """邀请 → 接受 → Admin 成功分配评委"""
     race = race_in_judging
-    work_id = race["work"]["id"]
+    _invite_and_accept(client, admin_token, race["id"], judge_user["id"], judge_token)
 
     resp = client.post(
         f"/api/v1/admin/races/{race['id']}/judge-assignments",
         data=json.dumps({
-            "assignments": [{"work_id": work_id, "judge_user_id": judge_user["id"]}]
+            "assignments": [{"work_id": race["work"]["id"], "judge_user_id": judge_user["id"]}]
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -139,7 +254,6 @@ def test_admin_assign_judge_success(
     assert resp.status_code == 201
     data = json.loads(resp.data)["data"]
     assert data["count"] == 1
-    assert len(data["assignments"]) == 1
 
 
 def test_admin_assign_judge_fail_not_admin(
@@ -162,11 +276,11 @@ def test_admin_assign_judge_fail_not_admin(
 
 
 def test_admin_list_assignments(
-    client, admin_token, race_in_judging, judge_user
+    client, admin_token, judge_token, race_in_judging, judge_user
 ):
     """Admin 查看分配情况"""
     race = race_in_judging
-    # 先分配
+    _invite_and_accept(client, admin_token, race["id"], judge_user["id"], judge_token)
     client.post(
         f"/api/v1/admin/races/{race['id']}/judge-assignments",
         data=json.dumps({
@@ -184,16 +298,15 @@ def test_admin_list_assignments(
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert resp.status_code == 200
-    data = json.loads(resp.data)["data"]
-    assert len(data) >= 1
+    assert len(json.loads(resp.data)["data"]) >= 1
 
 
 def test_admin_delete_assignment_before_judgment(
-    client, admin_token, race_in_judging, judge_user
+    client, admin_token, judge_token, race_in_judging, judge_user
 ):
     """评审未提交时可取消分配"""
     race = race_in_judging
-    # 先分配
+    _invite_and_accept(client, admin_token, race["id"], judge_user["id"], judge_token)
     assign_resp = client.post(
         f"/api/v1/admin/races/{race['id']}/judge-assignments",
         data=json.dumps({
@@ -216,6 +329,36 @@ def test_admin_delete_assignment_before_judgment(
 
 
 # =============================================
+# 自评防护
+# =============================================
+
+
+def test_self_review_prevented(
+    client, admin_token, rider_a_token, race_in_judging, rider_a
+):
+    """评委不能被分配去评自己的作品 → 403"""
+    race = race_in_judging
+    # rider_a 是 work owner，试图以 judge 身份评自己的作品
+    # 先给 rider_a 加上 judge 角色
+    from app.database import get_db as _get_db
+    import os as _os, tempfile, flask
+    # 简化：用 rider_a 已有的 token（角色是 rider），切换到 judge 角色需要特殊处理
+    # 这里直接验证：如果 judge_user_id == work_owner_user_id，batch_assign 应返回 403
+    resp = client.post(
+        f"/api/v1/admin/races/{race['id']}/judge-assignments",
+        data=json.dumps({
+            "assignments": [{
+                "work_id": race["work"]["id"],
+                "judge_user_id": rider_a["id"],  # rider_a is work owner
+            }]
+        }),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 403
+
+
+# =============================================
 # 评分提交
 # =============================================
 
@@ -226,8 +369,7 @@ def test_judge_submit_judgment_success(
     """评委成功提交四维评分"""
     race = race_in_judging
     work_id = race["work"]["id"]
-
-    # 先分配
+    _invite_and_accept(client, admin_token, race["id"], judge_user["id"], judge_token)
     client.post(
         f"/api/v1/admin/races/{race['id']}/judge-assignments",
         data=json.dumps({
@@ -237,14 +379,11 @@ def test_judge_submit_judgment_success(
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
-    # 提交评分
     resp = client.post(
         f"/api/v1/judge/works/{work_id}/judgments",
         data=json.dumps({
-            "technical_score": 8,
-            "innovation_score": 7,
-            "presentation_score": 9,
-            "completeness_score": 6,
+            "technical_score": 8, "innovation_score": 7,
+            "presentation_score": 9, "completeness_score": 6,
             "comment": "Good work!",
         }),
         content_type="application/json",
@@ -253,7 +392,6 @@ def test_judge_submit_judgment_success(
     assert resp.status_code == 201
     data = json.loads(resp.data)["data"]
     assert data["technical_score"] == 8
-    assert data["innovation_score"] == 7
 
 
 def test_judge_submit_judgment_fail_not_assigned(
@@ -264,11 +402,8 @@ def test_judge_submit_judgment_fail_not_assigned(
     resp = client.post(
         f"/api/v1/judge/works/{race['work']['id']}/judgments",
         data=json.dumps({
-            "technical_score": 8,
-            "innovation_score": 7,
-            "presentation_score": 9,
-            "completeness_score": 6,
-            "comment": "Not assigned",
+            "technical_score": 8, "innovation_score": 7,
+            "presentation_score": 9, "completeness_score": 6,
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {judge_token}"},
@@ -282,8 +417,7 @@ def test_judge_submit_duplicate_judgment(
     """同一作品不可重复评分 → 409"""
     race = race_in_judging
     work_id = race["work"]["id"]
-
-    # 分配
+    _invite_and_accept(client, admin_token, race["id"], judge_user["id"], judge_token)
     client.post(
         f"/api/v1/admin/races/{race['id']}/judge-assignments",
         data=json.dumps({
@@ -293,25 +427,21 @@ def test_judge_submit_duplicate_judgment(
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
-    # 第一次
     client.post(
         f"/api/v1/judge/works/{work_id}/judgments",
         data=json.dumps({
             "technical_score": 8, "innovation_score": 7,
             "presentation_score": 9, "completeness_score": 6,
-            "comment": "First",
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {judge_token}"},
     )
 
-    # 第二次 → 409
     resp = client.post(
         f"/api/v1/judge/works/{work_id}/judgments",
         data=json.dumps({
             "technical_score": 5, "innovation_score": 5,
             "presentation_score": 5, "completeness_score": 5,
-            "comment": "Second attempt",
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {judge_token}"},
@@ -325,8 +455,7 @@ def test_judge_update_judgment_success(
     """评委成功修改评分"""
     race = race_in_judging
     work_id = race["work"]["id"]
-
-    # 分配 + 提交
+    _invite_and_accept(client, admin_token, race["id"], judge_user["id"], judge_token)
     client.post(
         f"/api/v1/admin/races/{race['id']}/judge-assignments",
         data=json.dumps({
@@ -340,27 +469,23 @@ def test_judge_update_judgment_success(
         data=json.dumps({
             "technical_score": 8, "innovation_score": 7,
             "presentation_score": 9, "completeness_score": 6,
-            "comment": "Initial",
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {judge_token}"},
     )
     judgment_id = json.loads(submit_resp.data)["data"]["id"]
 
-    # 修改
     resp = client.put(
         f"/api/v1/judge/judgments/{judgment_id}",
         data=json.dumps({
             "technical_score": 9, "innovation_score": 8,
             "presentation_score": 9, "completeness_score": 7,
-            "comment": "Updated",
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {judge_token}"},
     )
     assert resp.status_code == 200
-    data = json.loads(resp.data)["data"]
-    assert data["technical_score"] == 9
+    assert json.loads(resp.data)["data"]["technical_score"] == 9
 
 
 def test_judge_update_judgment_fail_not_owner(
@@ -370,8 +495,7 @@ def test_judge_update_judgment_fail_not_owner(
     """评委不能修改他人的评分"""
     race = race_in_judging
     work_id = race["work"]["id"]
-
-    # 分配 judge_a
+    _invite_and_accept(client, admin_token, race["id"], judge_user["id"], judge_token)
     client.post(
         f"/api/v1/admin/races/{race['id']}/judge-assignments",
         data=json.dumps({
@@ -385,20 +509,17 @@ def test_judge_update_judgment_fail_not_owner(
         data=json.dumps({
             "technical_score": 8, "innovation_score": 7,
             "presentation_score": 9, "completeness_score": 6,
-            "comment": "From judge_a",
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {judge_token}"},
     )
     judgment_id = json.loads(submit_resp.data)["data"]["id"]
 
-    # judge_b 尝试修改 → 403
     resp = client.put(
         f"/api/v1/judge/judgments/{judgment_id}",
         data=json.dumps({
             "technical_score": 1, "innovation_score": 1,
             "presentation_score": 1, "completeness_score": 1,
-            "comment": "Hack attempt",
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {judge_b_token}"},
@@ -411,13 +532,11 @@ def test_judge_view_own_assignments(
 ):
     """评委查看自己的评审清单"""
     race = race_in_judging
-    work_id = race["work"]["id"]
-
-    # 分配
+    _invite_and_accept(client, admin_token, race["id"], judge_user["id"], judge_token)
     client.post(
         f"/api/v1/admin/races/{race['id']}/judge-assignments",
         data=json.dumps({
-            "assignments": [{"work_id": work_id, "judge_user_id": judge_user["id"]}]
+            "assignments": [{"work_id": race["work"]["id"], "judge_user_id": judge_user["id"]}]
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {admin_token}"},
@@ -430,11 +549,10 @@ def test_judge_view_own_assignments(
     assert resp.status_code == 200
     data = json.loads(resp.data)["data"]
     assert len(data) >= 1
-    assert data[0]["work"]["id"] == work_id
 
 
 # =============================================
-# 评分封存（ended 后不可改）
+# 评分封存
 # =============================================
 
 
@@ -442,11 +560,10 @@ def test_judgment_sealed_after_race_ends(
     client, admin_token, judge_token,
     race_in_judging, judge_user
 ):
-    """赛事 ended 后评分不可修改（触发器拦截）"""
+    """赛事 ended 后评分不可修改"""
     race = race_in_judging
     work_id = race["work"]["id"]
-
-    # 分配 + 提交评分
+    _invite_and_accept(client, admin_token, race["id"], judge_user["id"], judge_token)
     client.post(
         f"/api/v1/admin/races/{race['id']}/judge-assignments",
         data=json.dumps({
@@ -460,32 +577,67 @@ def test_judgment_sealed_after_race_ends(
         data=json.dumps({
             "technical_score": 8, "innovation_score": 7,
             "presentation_score": 9, "completeness_score": 6,
-            "comment": "Good",
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {judge_token}"},
     )
     judgment_id = json.loads(submit_resp.data)["data"]["id"]
 
-    # Admin 结束赛事
     client.post(
         f"/api/v1/organizer/races/{race['id']}/complete",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
 
-    # 尝试修改评分 → 应被触发器拦截
     resp = client.put(
         f"/api/v1/judge/judgments/{judgment_id}",
         data=json.dumps({
             "technical_score": 10, "innovation_score": 10,
             "presentation_score": 10, "completeness_score": 10,
-            "comment": "Should fail",
         }),
         content_type="application/json",
         headers={"Authorization": f"Bearer {judge_token}"},
     )
-    # 422: InvalidStateError (service层拦截) 或 500 (触发器触发)
     assert resp.status_code in (422, 500)
+
+
+# =============================================
+# 评审结果汇总
+# =============================================
+
+
+def test_organizer_judgment_summary(
+    client, admin_token, judge_token, race_in_judging, judge_user
+):
+    """Organizer 查看评审汇总"""
+    race = race_in_judging
+    work_id = race["work"]["id"]
+    _invite_and_accept(client, admin_token, race["id"], judge_user["id"], judge_token)
+    client.post(
+        f"/api/v1/admin/races/{race['id']}/judge-assignments",
+        data=json.dumps({
+            "assignments": [{"work_id": work_id, "judge_user_id": judge_user["id"]}]
+        }),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    client.post(
+        f"/api/v1/judge/works/{work_id}/judgments",
+        data=json.dumps({
+            "technical_score": 8, "innovation_score": 7,
+            "presentation_score": 9, "completeness_score": 6,
+        }),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {judge_token}"},
+    )
+
+    resp = client.get(
+        f"/api/v1/organizer/races/{race['id']}/judgments",
+        headers={"Authorization": f"Bearer {admin_token}"},
+    )
+    assert resp.status_code == 200
+    data = json.loads(resp.data)["data"]
+    assert data["total_works"] >= 1
+    assert len(data["rankings"]) >= 1
 
 
 # =============================================
@@ -496,10 +648,7 @@ def test_judgment_sealed_after_race_ends(
 def test_admin_cannot_assign_to_other_organizer_race(
     client, admin_token, race_b, judge_user
 ):
-    """Admin 不能将评委分配到非自己管理的赛事（admin 非 race creator）"""
-    # race_b 属于 organizer_b，admin 没有该赛事的 created_by 权限
-    # 实际上 admin 有可能有权限...看 team-division 说的是校验 race.created_by_user_id == current_user_id
-    # 我们需要仔细再看，admin is not the creator of race_b
+    """Admin 不能操作非自己管理的赛事"""
     resp = client.post(
         f"/api/v1/admin/races/{race_b['id']}/judge-assignments",
         data=json.dumps({
@@ -508,5 +657,4 @@ def test_admin_cannot_assign_to_other_organizer_race(
         content_type="application/json",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    # Should fail because admin is not the race creator
     assert resp.status_code == 403

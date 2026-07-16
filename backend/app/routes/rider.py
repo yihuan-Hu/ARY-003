@@ -6,6 +6,7 @@ from app.services.work_service import WorkService
 from app.services.coach_service import RidingCoachService
 from app.services.readiness_service import ReviewReadinessService
 from app.services.rider_profile_service import RiderProfileService
+from app.services.report_service import ReportService
 from app.dao.race_dao import RaceDAO
 from app.dao.work_dao import WorkDAO
 from app.utils.auth import require_auth, require_role
@@ -29,6 +30,7 @@ work_dao = WorkDAO()
 coach_service = RidingCoachService()
 readiness_service = ReviewReadinessService()
 rider_profile_service = RiderProfileService()
+report_service = ReportService()
 
 
 def _pagination_args():
@@ -209,3 +211,20 @@ def get_my_profile():
     """Rider 查看自己的完整档案（含未公开 work）"""
     profile = rider_profile_service.get_private_profile(g.current_user_id)
     return success(profile)
+
+
+# =============================================
+# 人员 C：Rider Report
+# =============================================
+
+
+@rider_bp.route("/api/v1/rider/report", methods=["GET"])
+@require_auth
+def get_my_report():
+    """Rider 查看自己的参赛报告"""
+    body = report_service.generate_rider_report(g.current_user_id)
+    saved = report_service.save_report(
+        "rider_report", g.current_user_id, None,
+        f"Rider Report - User {g.current_user_id}", body,
+    )
+    return success({"report": body, "saved_id": saved["id"]})

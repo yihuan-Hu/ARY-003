@@ -1,7 +1,7 @@
 """
 人员 C：评委路由（Judge 蓝图）
 
-提供评委评审清单查看 + 评分提交/修改。
+提供评委邀请接受/拒绝 + 评审清单查看 + 评分提交/修改。
 """
 from flask import Blueprint, g, request
 
@@ -20,6 +20,48 @@ judging_service = JudgingService()
 judgment_dao = JudgingRecordDAO()
 assignment_dao = JudgeAssignmentDAO()
 work_dao = WorkDAO()
+
+
+# =============================================
+# 评委邀请（接受/拒绝）
+# =============================================
+
+
+@judge_bp.route("/api/v1/judge/invitations", methods=["GET"])
+@require_auth
+@require_role("judge")
+def list_my_invitations():
+    """评委查看自己收到的邀请"""
+    return success(judging_service.list_my_invitations(g.current_user_id))
+
+
+@judge_bp.route(
+    "/api/v1/judge/invitations/<int:invitation_id>/accept",
+    methods=["POST"],
+)
+@require_auth
+@require_role("judge")
+def accept_invitation(invitation_id):
+    """评委接受邀请"""
+    result = judging_service.accept_invitation(invitation_id, g.current_user_id)
+    return success(result)
+
+
+@judge_bp.route(
+    "/api/v1/judge/invitations/<int:invitation_id>/reject",
+    methods=["POST"],
+)
+@require_auth
+@require_role("judge")
+def reject_invitation(invitation_id):
+    """评委拒绝邀请"""
+    result = judging_service.reject_invitation(invitation_id, g.current_user_id)
+    return success(result)
+
+
+# =============================================
+# 评审清单 + 评分
+# =============================================
 
 
 @judge_bp.route("/api/v1/judge/assignments", methods=["GET"])
