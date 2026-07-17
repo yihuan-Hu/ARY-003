@@ -599,6 +599,37 @@ def init_db(app=None):
     _add_column_if_missing(cursor, "reports", "auto_fill", "INTEGER NOT NULL DEFAULT 1")
     _add_column_if_missing(cursor, "reports", "published_at", "TEXT")
 
+    cursor.execute("DROP TRIGGER IF EXISTS trg_reports_subject_shape_insert")
+    cursor.execute("""
+        CREATE TRIGGER trg_reports_subject_shape_insert
+        BEFORE INSERT ON reports
+        WHEN (
+            NEW.report_type = 'rider_report'
+            AND NEW.subject_registration_id IS NULL
+        ) OR (
+            NEW.report_type IN ('race_report', 'review_summary')
+            AND NEW.subject_registration_id IS NOT NULL
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid report subject_registration_id');
+        END
+    """)
+    cursor.execute("DROP TRIGGER IF EXISTS trg_reports_subject_shape_update")
+    cursor.execute("""
+        CREATE TRIGGER trg_reports_subject_shape_update
+        BEFORE UPDATE ON reports
+        WHEN (
+            NEW.report_type = 'rider_report'
+            AND NEW.subject_registration_id IS NULL
+        ) OR (
+            NEW.report_type IN ('race_report', 'review_summary')
+            AND NEW.subject_registration_id IS NOT NULL
+        )
+        BEGIN
+            SELECT RAISE(ABORT, 'invalid report subject_registration_id');
+        END
+    """)
+
     conn.commit()
     conn.execute("PRAGMA foreign_keys=ON")
 

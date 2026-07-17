@@ -127,5 +127,4 @@ class JudgeAssignmentDAO(BaseDAO):
                 (race_id, work_id, judge_user_id),
             )
             created_assignments.append(self.find_by_id(cursor.lastrowid))
-        db.commit()
         return created_assignments

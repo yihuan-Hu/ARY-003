@@ -3,6 +3,7 @@
 覆盖 P0/P1/P2 所有必须测试用例。
 """
 import json
+import sqlite3
 import pytest
 from tests.conftest import _create_user, _login
 
@@ -1031,6 +1032,109 @@ def test_rider_cannot_view_other_rider_report(
         headers={"Authorization": f"Bearer {rider_b_token}"},
     )
     assert resp.status_code == 403
+
+
+def test_report_edit_route_updates_title_and_body(
+    client, organizer_a, organizer_a_token
+):
+    """PUT /organizer/reports/<id> 可在发布前编辑标题和正文"""
+    resp = client.post(
+        "/api/v1/organizer/races",
+        data=json.dumps({"name": "Editable Report Race"}),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {organizer_a_token}"},
+    )
+    race_id = json.loads(resp.data)["data"]["id"]
+
+    gen_resp = client.post(
+        f"/api/v1/organizer/races/{race_id}/reports/generate",
+        data=json.dumps({"report_type": "race_report", "title": "Draft title"}),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {organizer_a_token}"},
+    )
+    report_id = json.loads(gen_resp.data)["data"]["id"]
+
+    edit_resp = client.put(
+        f"/api/v1/organizer/reports/{report_id}",
+        data=json.dumps({
+            "title": "Edited title",
+            "body_json": {"summary": "edited body"},
+        }),
+        content_type="application/json",
+        headers={"Authorization": f"Bearer {organizer_a_token}"},
+    )
+    assert edit_resp.status_code == 200
+    edited = json.loads(edit_resp.data)["data"]
+    assert edited["title"] == "Edited title"
+    assert json.loads(edited["body_json"])["summary"] == "edited body"
+
+
+def test_report_table_rejects_invalid_subject_registration_shape(app):
+    """DB 层约束 rider_report 必须绑定 registration，其他报告必须为空"""
+    from app.database import get_db
+
+    with app.app_context():
+        db = get_db()
+        db.execute(
+            "INSERT INTO races (name, status, created_by_user_id) VALUES (?, ?, ?)",
+            ("Report Constraint Race", "published", 1),
+        )
+        race_id = db.execute("SELECT last_insert_rowid() AS id").fetchone()["id"]
+        db.commit()
+
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute(
+                """INSERT INTO reports
+                   (report_type, owner_user_id, race_id, title, body_json)
+                   VALUES ('rider_report', 1, ?, 'Invalid Rider Report', '{}')""",
+                (race_id,),
+            )
+            db.commit()
+        db.rollback()
+
+        with pytest.raises(sqlite3.IntegrityError):
+            db.execute(
+                """INSERT INTO reports
+                   (report_type, owner_user_id, race_id, subject_registration_id,
+                    title, body_json)
+                   VALUES ('race_report', 1, ?, 1, 'Invalid Race Report', '{}')""",
+                (race_id,),
+            )
+            db.commit()
+        db.rollback()
+
+
+def test_judging_deadline_uses_timezone_aware_datetime_comparison():
+    """deadline 比较必须按真实时刻，不按字符串字典序"""
+    from datetime import datetime, timezone
+    from app.services.judging_service import _parse_deadline
+
+    earlier = _parse_deadline("2026-07-17T12:30:00+08:00")
+    later = _parse_deadline("2026-07-17T05:00:00Z")
+
+    assert earlier.astimezone(timezone.utc) < later.astimezone(timezone.utc)
+    assert "2026-07-17T12:30:00+08:00" > "2026-07-17T05:00:00Z"
+
+
+def test_judge_assignment_dao_batch_create_leaves_commit_to_service(app):
+    """DAO 批量创建不应自行 commit，事务由 Service 层统一控制"""
+    from app.dao.judging_dao import JudgeAssignmentDAO
+    from app.database import get_db
+
+    with app.app_context():
+        db = get_db()
+        still_in_transaction = False
+        try:
+            db.execute("BEGIN IMMEDIATE")
+            assert db.in_transaction
+            dao = JudgeAssignmentDAO()
+            dao.batch_create(1, [])
+            still_in_transaction = db.in_transaction
+        finally:
+            if db.in_transaction:
+                db.rollback()
+
+    assert still_in_transaction
 
 
 # =============================================
