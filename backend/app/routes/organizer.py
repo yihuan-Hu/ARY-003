@@ -31,6 +31,7 @@ from app.schemas import (
     AnnouncementEditSchema,
     AwardCreateSchema,
     AwardEditSchema,
+    JudgeAssignmentBatchSchema,
 )
 from app.dao.announcement_dao import AnnouncementDAO
 
@@ -622,3 +623,227 @@ def list_my_reports():
 def get_report(report_id):
     """获取单个报告详情"""
     return success(report_service.get_report(report_id, g.current_user_id))
+
+
+# =============================================
+# 人员 C：评委邀请（Organizer 主控，替代旧 Admin 路由）
+# =============================================
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/judge-invitations",
+    methods=["POST"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def invite_judge(race_id):
+    """邀请评委加入赛事（Organizer 主控）"""
+    body = request.get_json(silent=True) or {}
+    judge_user_id = body.get("judge_user_id")
+    message = body.get("message", "")
+    if not judge_user_id:
+        raise ValidationError("judge_user_id is required")
+    result = judging_service.invite_judge(
+        race_id, int(judge_user_id), g.current_user_id, message
+    )
+    return created(result)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/judge-invitations",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def list_judge_invitations(race_id):
+    """查看赛事的所有评委邀请"""
+    return success(judging_service.list_invitations(race_id, g.current_user_id))
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/judge-assignments",
+    methods=["POST"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+@validate(JudgeAssignmentBatchSchema())
+def batch_assign_judges(race_id):
+    """批量分配评委（仅已接受邀请的评委可被分配）"""
+    body = g.validated_body
+    assignments = body["assignments"]
+    normalized = []
+    for item in assignments:
+        if "work_id" not in item or "judge_user_id" not in item:
+            raise ValidationError(
+                "Each assignment must have work_id and judge_user_id"
+            )
+        normalized.append({
+            "work_id": int(item["work_id"]),
+            "judge_user_id": int(item["judge_user_id"]),
+        })
+    result = judging_service.batch_assign(
+        race_id, normalized, g.current_user_id
+    )
+    return created(result)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/judge-assignments",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def list_judge_assignments(race_id):
+    """查看当前分配情况"""
+    result = judging_service.list_assignments(race_id, g.current_user_id)
+    return success(result)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/judge-assignments/<int:assignment_id>",
+    methods=["DELETE"],
+)
+@require_auth
+@require_role("organizer")
+def delete_judge_assignment(assignment_id):
+    """取消单条分配（评审尚未提交时）"""
+    result = judging_service.delete_assignment(
+        assignment_id, g.current_user_id
+    )
+    return success(result)
+
+
+# =============================================
+# 人员 C：Disqualify / Restore 作品
+# =============================================
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/works/<int:work_id>/disqualify",
+    methods=["POST"],
+)
+@require_auth
+@require_role("organizer")
+def disqualify_work(work_id):
+    """取消作品资格（Organizer 只能操作自己赛事作品）"""
+    body = request.get_json(silent=True) or {}
+    reason = body.get("reason", "")
+    result = judging_service.disqualify_work(work_id, g.current_user_id, reason)
+    return success(result)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/works/<int:work_id>/restore",
+    methods=["POST"],
+)
+@require_auth
+@require_role("organizer")
+def restore_work(work_id):
+    """恢复作品资格"""
+    result = judging_service.restore_work(work_id, g.current_user_id)
+    return success(result)
+
+
+# =============================================
+# 人员 C：评委搜索（平台账号搜索）
+# =============================================
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/accounts",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+def search_accounts():
+    """平台账号搜索，用于选择评委"""
+    try:
+        page = max(1, int(request.args.get("page", 1)))
+        per_page = min(100, max(1, int(request.args.get("per_page", 20))))
+    except ValueError as error:
+        raise ValidationError("page and per_page must be integers") from error
+    q = (request.args.get("q") or "").strip()
+    from app.services.judging_service import JudgingService
+    result = judging_service.search_accounts(q, page, per_page)
+    return success(result)
+
+
+# =============================================
+# 人员 C：Report 模块（生成/编辑/发布/隐藏）
+# =============================================
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/reports/generate",
+    methods=["POST"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def generate_report(race_id):
+    """生成赛事报告（draft 状态）"""
+    body = request.get_json(silent=True) or {}
+    report_type = body.get("report_type", "race_report")
+    auto_fill = body.get("auto_fill", True)
+    title = body.get("title", None)
+    subject_registration_id = body.get("subject_registration_id", None)
+    result = report_service.generate(
+        race_id, g.current_user_id, report_type,
+        auto_fill=auto_fill, title=title,
+        subject_registration_id=subject_registration_id,
+    )
+    return created(result)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/reports/<int:report_id>",
+    methods=["PUT"],
+)
+@require_auth
+@require_role("organizer")
+def edit_report(report_id):
+    """编辑报告内容"""
+    body = request.get_json(silent=True) or {}
+    result = report_service.edit(report_id, g.current_user_id, body)
+    return success(result)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/reports/<int:report_id>/publish",
+    methods=["POST"],
+)
+@require_auth
+@require_role("organizer")
+def publish_report(report_id):
+    """发布报告（draft/private → public）"""
+    result = report_service.publish(report_id, g.current_user_id)
+    return success(result)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/reports/<int:report_id>/hide",
+    methods=["POST"],
+)
+@require_auth
+@require_role("organizer")
+def hide_report(report_id):
+    """隐藏报告（public → private）"""
+    result = report_service.hide(report_id, g.current_user_id)
+    return success(result)
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/reports",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def list_race_reports(race_id):
+    """Organizer 查看赛事的所有报告（含 draft/private/public）"""
+    result = report_service.list_for_race(race_id, g.current_user_id)
+    return success(result)

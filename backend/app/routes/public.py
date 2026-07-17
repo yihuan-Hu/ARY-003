@@ -7,6 +7,7 @@ from app.database import get_db
 from app.services.integrity_service import verify_resource_integrity
 from app.services.award_service import AwardService
 from app.services.rider_profile_service import RiderProfileService
+from app.services.report_service import ReportService
 from app.utils.errors import NotFoundError, ValidationError
 from app.utils.response import success
 
@@ -17,6 +18,7 @@ work_dao = WorkDAO()
 announcement_dao = AnnouncementDAO()
 award_service = AwardService()
 rider_profile_service = RiderProfileService()
+report_service = ReportService()
 
 PUBLIC_STATUSES = {
     "published",
@@ -174,3 +176,18 @@ def get_rider_profile(user_id):
     """公开骑手档案（无需认证）"""
     profile = rider_profile_service.get_public_profile(user_id)
     return success(profile)
+
+
+# =============================================
+# 人员 C：公开 Report
+# =============================================
+
+
+@public_bp.route(
+    "/api/v1/public/races/<int:race_id>/reports",
+    methods=["GET"],
+)
+def list_public_reports(race_id):
+    """Public 查看赛事的公开报告（只返回 visibility='public'）"""
+    result = report_service.list_public_for_race(race_id)
+    return success(result)

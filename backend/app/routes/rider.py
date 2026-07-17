@@ -228,3 +228,14 @@ def get_my_report():
         f"Rider Report - User {g.current_user_id}", body,
     )
     return success({"report": body, "saved_id": saved["id"]})
+
+
+@rider_bp.route(
+    "/api/v1/rider/registrations/<int:registration_id>/report",
+    methods=["GET"],
+)
+@require_auth
+def get_registration_report(registration_id):
+    """Rider 查看自己某次报名的已发布 rider_report"""
+    result = report_service.get_rider_report(registration_id, g.current_user_id)
+    return success(result)

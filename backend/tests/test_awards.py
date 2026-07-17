@@ -240,7 +240,7 @@ def test_delete_award_fail_after_race_ended(
 def test_public_leaderboard(
     client, organizer_a_token, race_for_awards
 ):
-    """公开榜单按 position 排列"""
+    """公开榜单从 works + judging_records 实时聚合（含奖项关联）"""
     race = race_for_awards
     # 创建奖项
     client.post(
@@ -264,10 +264,12 @@ def test_public_leaderboard(
     resp = client.get(f"/api/v1/public/races/{race['id']}/leaderboard")
     assert resp.status_code == 200
     data = json.loads(resp.data)["data"]
-    assert len(data) == 2
-    assert data[0]["position"] == 1
-    assert data[0]["award_title"] == "冠军"
-    assert "winner_username" in data[0]
+    # P0-3: 新格式返回 {rankings, disqualified, race_id, tiebreaker}
+    assert "rankings" in data
+    assert len(data["rankings"]) >= 1
+    # 冠军在 rankings 中
+    gold = [r for r in data["rankings"] if r.get("award_title") == "冠军"]
+    assert len(gold) == 1
 
 
 def test_public_leaderboard_no_auth_required(client, race_for_awards):

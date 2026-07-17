@@ -2,9 +2,11 @@
 人员 C：Report 模块
 
 提供三类报告：
-- rider_report: 骑手个人参赛报告
+- rider_report: 骑手个人参赛报告（绑定 subject_registration_id）
 - race_report: 赛事整体报告
 - review_summary: 评审汇总报告
+
+可见性流程：draft → private → public（单向）
 """
 import json
 
@@ -15,7 +17,7 @@ from app.dao.registration_dao import RegistrationDAO
 from app.dao.race_project_dao import RaceProjectDAO
 from app.dao.judging_dao import JudgingRecordDAO, JudgeAssignmentDAO
 from app.dao.award_dao import AwardDAO
-from app.utils.errors import NotFoundError, ForbiddenError
+from app.utils.errors import NotFoundError, ForbiddenError, InvalidStateError
 
 
 class ReportService:
@@ -33,10 +35,7 @@ class ReportService:
     # ================================================================
 
     def generate_rider_report(self, user_id: int) -> dict:
-        """为骑手生成个人参赛报告。
-
-        包含：参赛统计、作品列表、评分汇总、获奖情况。
-        """
+        """为骑手生成个人参赛报告。"""
         registrations = self.registration_dao.find_by_user(user_id)
         race_entries = []
         total_judgments = 0
@@ -73,7 +72,6 @@ class ReportService:
                         "disqualified": w["disqualified"],
                     })
 
-            # 获奖
             awards = []
             db = get_db()
             award_rows = db.execute(
@@ -114,11 +112,6 @@ class ReportService:
     # ================================================================
 
     def generate_race_report(self, race_id: int, actor_user_id: int) -> dict:
-        """为赛事生成整体报告。
-
-        校验：actor 是 race creator。
-        包含：参赛人数、作品数、评审进度、评分分布、奖项。
-        """
         race = self.race_dao.find_by_id(race_id)
         if race is None:
             raise NotFoundError("Race not found")
@@ -129,7 +122,6 @@ class ReportService:
         approved = [r for r in registrations if r["status"] == "approved"]
         submitted_works = self.work_dao.find_submitted_by_race(race_id)
 
-        # 评审进度
         total_possible_judgments = 0
         total_actual_judgments = 0
         for w in submitted_works:
@@ -137,7 +129,6 @@ class ReportService:
             total_possible_judgments += len(assignments)
             total_actual_judgments += len(self.judgment_dao.find_by_work(w["id"]))
 
-        # 评分分布
         score_distribution = {"1-3": 0, "4-6": 0, "7-8": 0, "9-10": 0}
         all_scores = []
         for w in submitted_works:
@@ -153,10 +144,8 @@ class ReportService:
                 else:
                     score_distribution["9-10"] += 1
 
-        # 奖项
         awards = self.award_dao.find_by_race(race_id)
 
-        # 公告
         db = get_db()
         announcement_count = db.execute(
             "SELECT COUNT(*) AS cnt FROM announcements WHERE race_id = ?",
@@ -202,11 +191,6 @@ class ReportService:
     # ================================================================
 
     def generate_review_summary(self, race_id: int, actor_user_id: int) -> dict:
-        """评审汇总快照。
-
-        校验：actor 是 race creator。
-        包含：每个评委的评审进度 + 每条评审记录的详细信息。
-        """
         race = self.race_dao.find_by_id(race_id)
         if race is None:
             raise NotFoundError("Race not found")
@@ -216,7 +200,6 @@ class ReportService:
         judgments = self.judgment_dao.find_by_race(race_id)
         assignments = self.assignment_dao.find_by_race(race_id)
 
-        # 按评委汇总
         judge_map = {}
         for a in assignments:
             jid = a["judge_user_id"]
@@ -248,8 +231,58 @@ class ReportService:
         }
 
     # ================================================================
-    # 报告持久化
+    # 报告持久化（含可见性流：draft/private/public）
     # ================================================================
+
+    def generate(
+        self, race_id: int, actor_user_id: int, report_type: str,
+        auto_fill: bool = True, title: str = None,
+        subject_registration_id: int = None,
+    ) -> dict:
+        """生成报告（draft 状态保存）。
+
+        auto_fill=True 时填充赛事数据、报名数、作品数、评审完成率等。
+        rider_report 必须绑定 subject_registration_id。
+        """
+        race = self.race_dao.find_by_id(race_id)
+        if race is None:
+            raise NotFoundError("Race not found")
+        if race["created_by_user_id"] != actor_user_id:
+            raise ForbiddenError("You can only manage your own races")
+
+        if report_type == "rider_report" and not subject_registration_id:
+            raise InvalidStateError("rider_report requires subject_registration_id")
+
+        if auto_fill:
+            if report_type == "race_report":
+                body = self.generate_race_report(race_id, actor_user_id)
+            elif report_type == "review_summary":
+                body = self.generate_review_summary(race_id, actor_user_id)
+            elif report_type == "rider_report":
+                reg = self.registration_dao.find_by_id(subject_registration_id)
+                if reg is None:
+                    raise NotFoundError("Registration not found")
+                body = self.generate_rider_report(reg["user_id"])
+            else:
+                body = {}
+        else:
+            body = {}
+
+        if not title:
+            race_name = race["name"] if race else f"Race #{race_id}"
+            type_labels = {
+                "race_report": f"Race Report - {race_name}",
+                "review_summary": f"Review Summary - {race_name}",
+                "rider_report": f"Rider Report - Registration #{subject_registration_id}",
+            }
+            title = type_labels.get(report_type, f"Report - {race_name}")
+
+        return self.save_report(
+            report_type, actor_user_id, race_id, title, body,
+            subject_registration_id=subject_registration_id,
+            visibility="draft",
+            auto_fill=1 if auto_fill else 0,
+        )
 
     def save_report(
         self,
@@ -259,18 +292,103 @@ class ReportService:
         title: str,
         body: dict,
         summary: str = "",
+        subject_registration_id: int = None,
+        visibility: str = "draft",
+        auto_fill: int = 1,
     ) -> dict:
         """保存报告到 reports 表"""
         db = get_db()
         cursor = db.execute(
             """INSERT INTO reports
-               (report_type, owner_user_id, race_id, title, summary, body_json)
-               VALUES (?, ?, ?, ?, ?, ?)""",
-            (report_type, owner_user_id, race_id, title, summary, json.dumps(body)),
+               (report_type, owner_user_id, race_id, title, summary, body_json,
+                subject_registration_id, visibility, auto_fill)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                report_type, owner_user_id, race_id, title, summary,
+                json.dumps(body), subject_registration_id, visibility, auto_fill,
+            ),
         )
         db.commit()
         row = db.execute("SELECT * FROM reports WHERE id = ?", (cursor.lastrowid,)).fetchone()
         return dict(row)
+
+    def edit(self, report_id: int, user_id: int, data: dict) -> dict:
+        """编辑报告内容（仅 owner 可编辑 draft/private 报告）"""
+        db = get_db()
+        report = db.execute(
+            "SELECT * FROM reports WHERE id = ?", (report_id,)
+        ).fetchone()
+        if report is None:
+            raise NotFoundError("Report not found")
+        if report["owner_user_id"] != user_id:
+            raise ForbiddenError("You can only edit your own reports")
+        if report["visibility"] == "public":
+            raise InvalidStateError("Cannot edit a published report; hide it first")
+
+        updates = {}
+        for key in ("title", "summary", "body_json"):
+            if key in data:
+                updates[key] = data[key] if key != "body_json" else json.dumps(data[key])
+        if "subject_registration_id" in data:
+            updates["subject_registration_id"] = data["subject_registration_id"]
+
+        if updates:
+            set_clause = ", ".join(f"{k} = ?" for k in updates)
+            db.execute(
+                f"UPDATE reports SET {set_clause}, updated_at = datetime('now') WHERE id = ?",
+                tuple(updates.values()) + (report_id,),
+            )
+            db.commit()
+
+        return dict(db.execute(
+            "SELECT * FROM reports WHERE id = ?", (report_id,)
+        ).fetchone())
+
+    def publish(self, report_id: int, user_id: int) -> dict:
+        """发布报告（draft/private → public），记录 published_at"""
+        db = get_db()
+        report = db.execute(
+            "SELECT * FROM reports WHERE id = ?", (report_id,)
+        ).fetchone()
+        if report is None:
+            raise NotFoundError("Report not found")
+        if report["owner_user_id"] != user_id:
+            raise ForbiddenError("You can only publish your own reports")
+
+        db.execute(
+            """UPDATE reports
+               SET visibility = 'public', published_at = datetime('now'),
+                   updated_at = datetime('now')
+               WHERE id = ?""",
+            (report_id,),
+        )
+        db.commit()
+        return dict(db.execute(
+            "SELECT * FROM reports WHERE id = ?", (report_id,)
+        ).fetchone())
+
+    def hide(self, report_id: int, user_id: int) -> dict:
+        """隐藏报告（draft/public/private → private），清除 published_at"""
+        db = get_db()
+        report = db.execute(
+            "SELECT * FROM reports WHERE id = ?", (report_id,)
+        ).fetchone()
+        if report is None:
+            raise NotFoundError("Report not found")
+        if report["owner_user_id"] != user_id:
+            raise ForbiddenError("You can only hide your own reports")
+
+        db.execute(
+            """UPDATE reports
+               SET visibility = 'private', published_at = NULL,
+                   updated_at = datetime('now')
+               WHERE id = ?""",
+            (report_id,),
+        )
+        db.commit()
+        return dict(db.execute(
+            "SELECT * FROM reports WHERE id = ?", (report_id,)
+        ).fetchone())
 
     def get_reports_by_user(self, user_id: int) -> list[dict]:
         """获取用户的所有报告"""
@@ -282,11 +400,60 @@ class ReportService:
         return [dict(r) for r in rows]
 
     def get_report(self, report_id: int, user_id: int) -> dict:
-        """获取单个报告"""
+        """获取单个报告（owner 可查看自己的所有报告）"""
         db = get_db()
         row = db.execute(
             "SELECT * FROM reports WHERE id = ? AND owner_user_id = ?",
             (report_id, user_id),
+        ).fetchone()
+        if row is None:
+            raise NotFoundError("Report not found")
+        return dict(row)
+
+    def list_for_race(self, race_id: int, user_id: int) -> list[dict]:
+        """Organizer 查看赛事的所有报告（含 draft/private/public）"""
+        race = self.race_dao.find_by_id(race_id)
+        if race is None:
+            raise NotFoundError("Race not found")
+        if race["created_by_user_id"] != user_id:
+            raise ForbiddenError("You can only manage your own races")
+        db = get_db()
+        rows = db.execute(
+            "SELECT * FROM reports WHERE race_id = ? ORDER BY created_at DESC",
+            (race_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_public_for_race(self, race_id: int) -> list[dict]:
+        """Public 查看赛事的公开报告（只返回 visibility='public' 的 race_report / review_summary）"""
+        race = self.race_dao.find_by_id(race_id)
+        if race is None or race["status"] == "draft":
+            raise NotFoundError("Race not found")
+        db = get_db()
+        rows = db.execute(
+            """SELECT * FROM reports
+               WHERE race_id = ? AND visibility = 'public'
+                 AND report_type IN ('race_report', 'review_summary')
+               ORDER BY created_at DESC""",
+            (race_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def get_rider_report(self, registration_id: int, user_id: int) -> dict:
+        """Rider 查看自己 registration 的已发布 rider_report"""
+        reg = self.registration_dao.find_by_id(registration_id)
+        if reg is None:
+            raise NotFoundError("Registration not found")
+        if reg["user_id"] != user_id:
+            raise ForbiddenError("You can only view your own rider reports")
+
+        db = get_db()
+        row = db.execute(
+            """SELECT * FROM reports
+               WHERE subject_registration_id = ? AND report_type = 'rider_report'
+                 AND visibility = 'public'
+               ORDER BY created_at DESC LIMIT 1""",
+            (registration_id,),
         ).fetchone()
         if row is None:
             raise NotFoundError("Report not found")

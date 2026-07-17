@@ -23,44 +23,41 @@ work_dao = WorkDAO()
 
 
 # =============================================
-# 评委邀请（接受/拒绝）
+# 评委邀请（接受/拒绝）—— 只需登录，不要求已有 judge 角色
 # =============================================
 
 
-@judge_bp.route("/api/v1/judge/invitations", methods=["GET"])
+@judge_bp.route("/api/v1/judge-invitations", methods=["GET"])
 @require_auth
-@require_role("judge")
 def list_my_invitations():
-    """评委查看自己收到的邀请"""
+    """查看自己收到的所有评委邀请（只需登录）"""
     return success(judging_service.list_my_invitations(g.current_user_id))
 
 
 @judge_bp.route(
-    "/api/v1/judge/invitations/<int:invitation_id>/accept",
+    "/api/v1/judge-invitations/<int:invitation_id>/accept",
     methods=["POST"],
 )
 @require_auth
-@require_role("judge")
 def accept_invitation(invitation_id):
-    """评委接受邀请"""
+    """接受评委邀请（只需登录，接受后自动追加 judge 角色）"""
     result = judging_service.accept_invitation(invitation_id, g.current_user_id)
     return success(result)
 
 
 @judge_bp.route(
-    "/api/v1/judge/invitations/<int:invitation_id>/reject",
+    "/api/v1/judge-invitations/<int:invitation_id>/reject",
     methods=["POST"],
 )
 @require_auth
-@require_role("judge")
 def reject_invitation(invitation_id):
-    """评委拒绝邀请"""
+    """拒绝评委邀请（只需登录）"""
     result = judging_service.reject_invitation(invitation_id, g.current_user_id)
     return success(result)
 
 
 # =============================================
-# 评审清单 + 评分
+# 评审清单 + 评分（需要 judge 角色）
 # =============================================
 
 
@@ -108,3 +105,37 @@ def get_judgment(judgment_id):
     if record["judge_user_id"] != g.current_user_id:
         raise ForbiddenError("You can only view your own judgments")
     return success(record)
+
+
+# =============================================
+# 向后兼容：旧路径（/api/v1/judge/invitations → /api/v1/judge-invitations）
+# =============================================
+
+
+@judge_bp.route("/api/v1/judge/invitations", methods=["GET"])
+@require_auth
+def list_my_invitations_legacy():
+    """[DEPRECATED] 评委查看自己收到的邀请"""
+    return success(judging_service.list_my_invitations(g.current_user_id))
+
+
+@judge_bp.route(
+    "/api/v1/judge/invitations/<int:invitation_id>/accept",
+    methods=["POST"],
+)
+@require_auth
+def accept_invitation_legacy(invitation_id):
+    """[DEPRECATED] 评委接受邀请"""
+    result = judging_service.accept_invitation(invitation_id, g.current_user_id)
+    return success(result)
+
+
+@judge_bp.route(
+    "/api/v1/judge/invitations/<int:invitation_id>/reject",
+    methods=["POST"],
+)
+@require_auth
+def reject_invitation_legacy(invitation_id):
+    """[DEPRECATED] 评委拒绝邀请"""
+    result = judging_service.reject_invitation(invitation_id, g.current_user_id)
+    return success(result)

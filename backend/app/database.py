@@ -560,6 +560,7 @@ def init_db(app=None):
                 CHECK (status IN ('pending', 'accepted', 'rejected')),
             invited_by_user_id INTEGER NOT NULL REFERENCES users(id),
             message TEXT DEFAULT '',
+            responded_at TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now')),
             UNIQUE (race_id, judge_user_id)
@@ -577,14 +578,26 @@ def init_db(app=None):
                 CHECK (report_type IN ('rider_report', 'race_report', 'review_summary')),
             owner_user_id INTEGER NOT NULL REFERENCES users(id),
             race_id INTEGER REFERENCES races(id),
+            subject_registration_id INTEGER REFERENCES registrations(id),
             title TEXT NOT NULL,
             summary TEXT DEFAULT '',
             body_json TEXT DEFAULT '{}',
+            visibility TEXT NOT NULL DEFAULT 'draft'
+                CHECK (visibility IN ('draft', 'private', 'public')),
+            auto_fill INTEGER NOT NULL DEFAULT 1,
             generated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            published_at TEXT,
             created_at TEXT NOT NULL DEFAULT (datetime('now')),
             updated_at TEXT NOT NULL DEFAULT (datetime('now'))
         )
     """)
+
+    # ---- 迁移：为已有表补字段 ----
+    _add_column_if_missing(cursor, "judge_invitations", "responded_at", "TEXT")
+    _add_column_if_missing(cursor, "reports", "subject_registration_id", "INTEGER REFERENCES registrations(id)")
+    _add_column_if_missing(cursor, "reports", "visibility", "TEXT NOT NULL DEFAULT 'draft' CHECK (visibility IN ('draft', 'private', 'public'))")
+    _add_column_if_missing(cursor, "reports", "auto_fill", "INTEGER NOT NULL DEFAULT 1")
+    _add_column_if_missing(cursor, "reports", "published_at", "TEXT")
 
     conn.commit()
     conn.execute("PRAGMA foreign_keys=ON")

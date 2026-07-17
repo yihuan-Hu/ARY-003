@@ -102,8 +102,12 @@ class AwardService:
         self._check_race_ownership(race_id, user_id)
         return self.award_dao.find_by_race(race_id)
 
-    def get_leaderboard(self, race_id: int) -> list[dict]:
-        """公开榜单"""
+    def get_leaderboard(self, race_id: int) -> dict:
+        """公开榜单：实时从 works + judging_records 聚合评分排名。
+
+        支持 avg / median / trimmed_mean tiebreaker。
+        奖项关联展示，不改变排名。
+        """
         race = self.race_dao.find_by_id(race_id)
         if race is None or race["status"] == "draft":
             raise NotFoundError("Race not found")

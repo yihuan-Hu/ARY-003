@@ -228,7 +228,7 @@ def test_assign_fails_without_accepted_invitation(
         content_type="application/json",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 422  # P1-5: unaccepted invitation → 422
 
 
 # =============================================
@@ -355,7 +355,7 @@ def test_self_review_prevented(
         content_type="application/json",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
-    assert resp.status_code == 403
+    assert resp.status_code == 422  # P1-5: self-review → 422
 
 
 # =============================================
@@ -637,7 +637,7 @@ def test_organizer_judgment_summary(
     assert resp.status_code == 200
     data = json.loads(resp.data)["data"]
     assert data["total_works"] >= 1
-    assert len(data["rankings"]) >= 1
+    assert len(data["works"]) >= 1  # P1-10: rankings → works
 
 
 # =============================================
