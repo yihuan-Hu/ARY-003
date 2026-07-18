@@ -121,3 +121,61 @@ class AwardEditSchema(Schema):
     work_id = fields.Int(allow_none=True)
     registration_id = fields.Int(allow_none=True)
     description = fields.Str(validate=validate.Length(max=1000))
+
+
+# =============================================
+# 人员 D：CA 连接与会话
+# =============================================
+
+class CAConnectionCreateSchema(Schema):
+    """登记 CA 接入"""
+    ca_type = fields.Str(
+        required=True,
+        validate=validate.OneOf(["codex", "claude", "other"]),
+    )
+    provider_name = fields.Str(
+        required=True, validate=validate.Length(min=1, max=100)
+    )
+    api_key = fields.Str(load_default="")
+    config_json = fields.Dict(load_default={})
+
+
+class CAConnectionEditSchema(Schema):
+    """更新 CA 配置"""
+    provider_name = fields.Str(validate=validate.Length(min=1, max=100))
+    api_key = fields.Str()
+    config_json = fields.Dict()
+
+
+class CAWizardStepSchema(Schema):
+    """CA 向导每步提交数据"""
+    ca_type = fields.Str(
+        validate=validate.OneOf(["codex", "claude", "other"]),
+    )
+    provider_name = fields.Str(validate=validate.Length(min=1, max=100))
+    api_key = fields.Str()
+    config_json = fields.Dict()
+    repo_url = fields.Str()
+
+
+class CASessionIngestSchema(Schema):
+    """CA Session 数据接入"""
+    overall_progress = fields.Float(
+        load_default=0.0,
+        validate=validate.Range(min=0, max=1),
+    )
+    round_progress = fields.Float(
+        load_default=0.0,
+        validate=validate.Range(min=0, max=1),
+    )
+    cost_tokens = fields.Int(load_default=0, validate=validate.Range(min=0))
+    cost_usd = fields.Float(load_default=0.0, validate=validate.Range(min=0))
+    risk_level = fields.Str(
+        load_default="none",
+        validate=validate.OneOf(["none", "low", "medium", "high"]),
+    )
+    obstacle_count = fields.Int(load_default=0, validate=validate.Range(min=0))
+    violation_count = fields.Int(load_default=0, validate=validate.Range(min=0))
+    current_phase = fields.Str(load_default="DEV")
+    started_at = fields.Str(load_default=None, allow_none=True)
+    ended_at = fields.Str(load_default=None, allow_none=True)

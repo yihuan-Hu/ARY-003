@@ -599,6 +599,53 @@ def init_db(app=None):
     _add_column_if_missing(cursor, "reports", "auto_fill", "INTEGER NOT NULL DEFAULT 1")
     _add_column_if_missing(cursor, "reports", "published_at", "TEXT")
 
+    # =============================================
+    # 人员 D：CA 连接与会话
+    # =============================================
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ca_connections (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            race_project_id INTEGER NOT NULL REFERENCES race_projects(id),
+            ca_type TEXT NOT NULL CHECK(ca_type IN ('codex', 'claude', 'other')),
+            provider_name TEXT NOT NULL,
+            connection_status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(connection_status IN ('pending', 'connected', 'active', 'failed')),
+            ca_policy_source TEXT NOT NULL DEFAULT 'rider_choice'
+                CHECK(ca_policy_source IN ('organizer_specified', 'rider_choice')),
+            api_key_hash TEXT DEFAULT '',
+            handshake_at TEXT,
+            last_signal_at TEXT,
+            error_message TEXT DEFAULT '',
+            error_category TEXT DEFAULT '',
+            config_json TEXT DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(race_project_id, provider_name)
+        )
+    """)
+
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ca_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ca_connection_id INTEGER NOT NULL REFERENCES ca_connections(id),
+            overall_progress REAL DEFAULT 0.0
+                CHECK(overall_progress >= 0 AND overall_progress <= 1),
+            round_progress REAL DEFAULT 0.0
+                CHECK(round_progress >= 0 AND round_progress <= 1),
+            cost_tokens INTEGER DEFAULT 0 CHECK(cost_tokens >= 0),
+            cost_usd REAL DEFAULT 0.0 CHECK(cost_usd >= 0),
+            risk_level TEXT DEFAULT 'none'
+                CHECK(risk_level IN ('none', 'low', 'medium', 'high')),
+            obstacle_count INTEGER DEFAULT 0,
+            violation_count INTEGER DEFAULT 0,
+            current_phase TEXT DEFAULT 'DEV',
+            started_at TEXT,
+            ended_at TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+        )
+    """)
+
     cursor.execute("DROP TRIGGER IF EXISTS trg_reports_subject_shape_insert")
     cursor.execute("""
         CREATE TRIGGER trg_reports_subject_shape_insert

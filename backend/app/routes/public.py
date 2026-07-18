@@ -191,3 +191,47 @@ def list_public_reports(race_id):
     """Public 查看赛事的公开报告（只返回 visibility='public'）"""
     result = report_service.list_public_for_race(race_id)
     return success(result)
+
+
+# =============================================
+# 人员 D：Live Hall 实时大屏
+# =============================================
+
+
+from app.services.live_hall_service import LiveHallService
+
+live_hall_service = LiveHallService()
+
+
+@public_bp.route("/api/v1/public/races/<int:race_id>/live", methods=["GET"])
+def get_live(race_id):
+    """赛事实时聚合（Live Hall 大屏）"""
+    data = live_hall_service.get_live(race_id)
+    return success(data)
+
+
+@public_bp.route("/api/v1/public/races/<int:race_id>/live/entries", methods=["GET"])
+def get_live_entries(race_id):
+    """参赛者实时进度列表"""
+    entries = live_hall_service.get_live_entries(race_id)
+    return success(entries)
+
+
+# =============================================
+# 人员 D：Evidence Timeline 公开端
+# =============================================
+
+
+from app.services.timeline_service import TimelineService
+
+timeline_service = TimelineService()
+
+
+@public_bp.route(
+    "/api/v1/public/race-projects/<int:race_project_id>/timeline",
+    methods=["GET"],
+)
+def public_timeline(race_project_id):
+    """公开端 Timeline（只展示可公开摘要事件）"""
+    events = timeline_service.get_timeline(race_project_id, public=True)
+    return success(events)

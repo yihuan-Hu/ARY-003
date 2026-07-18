@@ -1,4 +1,4 @@
-from flask import Blueprint, request, g, make_response
+from flask import Blueprint, request, g, make_response, redirect
 
 from app.dao.user_dao import UserDAO
 from app.utils.auth import (
@@ -180,3 +180,45 @@ def update_profile():
         "username": updated["username"],
         "profile_completed": bool(updated.get("profile_completed", 0)),
     })
+
+
+# ---- GitHub OAuth（人员 D） ----
+
+@auth_bp.route("/api/v1/auth/github", methods=["GET"])
+def github_login():
+    """发起 GitHub OAuth 授权"""
+    redirect_uri = request.args.get("redirect_uri", "")
+    if not redirect_uri:
+        redirect_uri = request.host_url.rstrip("/") + "/api/v1/auth/github/callback"
+    try:
+        from app.services.oauth_service import GitHubOAuthService
+        svc = GitHubOAuthService()
+        url, state = svc.get_authorize_url(redirect_uri)
+        resp = redirect(url)
+        resp.set_cookie("oauth_state", state, httponly=True, samesite="Lax", max_age=600)
+        return resp
+    except RuntimeError as e:
+        raise ValidationError(str(e))
+
+
+@auth_bp.route("/api/v1/auth/github/callback", methods=["GET"])
+def github_callback():
+    """GitHub OAuth 回调处理"""
+    code = request.args.get("code", "")
+    state = request.args.get("state", "")
+
+    if not code:
+        raise ValidationError("Missing authorization code")
+
+    try:
+        from app.services.oauth_service import GitHubOAuthService
+        svc = GitHubOAuthService()
+        result = svc.handle_callback(code, state)
+        resp = make_response(success({
+            "token": result["token"],
+            "user": result["user"],
+            "is_new": result["is_new"],
+        }))
+        return resp
+    except RuntimeError as e:
+        raise ValidationError(str(e))

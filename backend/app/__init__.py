@@ -166,6 +166,7 @@ def create_app(config_class=Config):
     from app.routes.notification import notification_bp
     from app.routes.judge import judge_bp
     from app.routes.admin import admin_bp
+    from app.routes.ca import ca_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(rider_bp)
@@ -174,5 +175,6 @@ def create_app(config_class=Config):
     app.register_blueprint(notification_bp)
     app.register_blueprint(judge_bp)
     app.register_blueprint(admin_bp)
+    app.register_blueprint(ca_bp)
 
     return app

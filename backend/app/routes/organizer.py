@@ -847,3 +847,25 @@ def list_race_reports(race_id):
     """Organizer 查看赛事的所有报告（含 draft/private/public）"""
     result = report_service.list_for_race(race_id, g.current_user_id)
     return success(result)
+
+
+# =============================================
+# 人员 D：Evidence Timeline（Organizer 视角）
+# =============================================
+
+from app.services.timeline_service import TimelineService as OrgTimelineService
+
+org_timeline_service = OrgTimelineService()
+
+
+@organizer_bp.route(
+    "/api/v1/organizer/races/<int:race_id>/race-projects/<int:rp_id>/timeline",
+    methods=["GET"],
+)
+@require_auth
+@require_role("organizer")
+@require_managed_race()
+def get_rider_timeline(race_id, rp_id):
+    """Organizer 查看选手的 Evidence Timeline"""
+    events = org_timeline_service.get_timeline(rp_id, g.current_user_id)
+    return success(events)

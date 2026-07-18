@@ -5,7 +5,7 @@
 ## 当前结论
 
 * 项目处于**五人并行冲刺**阶段。分工见 `team-division.md`。
-* 角色 1/2/3/4 已交付并合并。人员 A（认证与安全基座）已交付。
+* 角色 1/2/3/4 已交付并合并。人员 A（认证与安全基座）已交付。人员 D（CA 全链路 + Live Hall + GitHub OAuth）已交付。
 * 人员 B 已完成赛事核心域 6 个模块，并保持给 C/D 的 Work、RaceProject、CA policy 上游契约稳定。
 * 人员 C 已完成评审系统 + 奖项榜单 + CSV 导出 + Review Readiness + RiderProfile。30 项 C 专项测试通过，已有 40 项回归测试通过。
 * 旧任务体系（角色 1-5、`docs/ary.plan.md`）已归档至 `docs/archive/`。
@@ -24,9 +24,9 @@
 | 评审系统（邀请/分配/评分/盲审） | 人员 C | ✅ 已交付 | 12 测试通过；judge_bp + admin_bp 蓝图 |
 | 奖项榜单 + CSV 导出 + Review Readiness | 人员 C | ✅ 已交付 | 10 测试通过；organizer_bp + public_bp 扩展 |
 | RiderProfile + Report | 人员 C | ✅ 已交付 | 8 测试通过；rider_bp + public_bp 扩展 |
-| CA 全链路（双模式/向导/Ingestion） | 人员 D | 🔄 进行中 | `team-division.md` §人员 D |
-| Live Hall + Evidence Timeline | 人员 D | 🔄 进行中 | `team-division.md` §人员 D |
-| GitHub OAuth + 旧系统收尾 | 人员 D | 🔄 进行中 | `team-division.md` §人员 D |
+| CA 全链路（双模式/向导/Ingestion） | 人员 D | ✅ 已交付 | 22 测试通过；`ca_bp` 蓝图 + `ca_connections`/`ca_sessions` 表 + LiveHall/Timeline；`test_ca_connection.py` + `test_ca_ingestion.py` |
+| Live Hall + Evidence Timeline | 人员 D | ✅ 已交付 | 4 测试通过；`public_bp` + `rider_bp` + `organizer_bp` 扩展；`test_public_apis.py` |
+| GitHub OAuth + 旧系统收尾 | 人员 D | ✅ 已交付 | 2 测试通过；`auth.py` OAuth 端点 + 5 个 `DEPRECATED.md`；`test_github_oauth.py` |
 | OpenAPI 契约 + 前端 | 人员 E | 🔄 进行中 | `team-division.md` §人员 E |
 | CI/CD + Docker + e2e + 上线 | 人员 E | 🔄 进行中 | `team-division.md` §人员 E |
 
@@ -42,6 +42,7 @@
 | B 的实现提示词 | `docs/prompt-b-implementation.md` |
 | B 6 模块验收 | 31 项 B 专项测试；连同 Checkpoint、Registration、Legacy 共 97 项通过 |
 | C 评审 + 奖项 + 导出 + Readiness + Profile | `backend/app/dao/judging_dao.py`、`award_dao.py`；`services/judging_service.py`、`award_service.py`、`readiness_service.py`、`rider_profile_service.py`；`routes/judge.py`、`admin.py`；30 项 C 专项测试通过 |
+| D CA 全链路 + Live Hall + OAuth | `backend/app/routes/ca.py`（ca_bp）、`routes/auth.py`（OAuth）；`dao/ca_connection_dao.py`、`ca_session_dao.py`；`services/timeline_service.py`；`database.py`（ca_connections/ca_sessions 表）；28 项 D 专项测试通过；5 个 `DEPRECATED.md` |
 | 业务文档集中管理 | `docs/`（7 份有效文档 + `docs/archive/` 6 份归档） |
 | 归档的文件（不可再引用） | `docs/archive/ary.plan.md`、`ux-hifi.taskbook.md`、`registration-ca-rules-alignment.taskbook.md` |
 | A 完成后 66 项回归通过 | `pytest tests/test_checkpoint.py tests/test_registration_state_machine.py tests/legacy -q` |

@@ -31,6 +31,9 @@ coach_service = RidingCoachService()
 readiness_service = ReviewReadinessService()
 rider_profile_service = RiderProfileService()
 report_service = ReportService()
+# 人员 D：Timeline
+from app.services.timeline_service import TimelineService
+timeline_service = TimelineService()
 
 
 def _pagination_args():
@@ -239,3 +242,20 @@ def get_registration_report(registration_id):
     """Rider 查看自己某次报名的已发布 rider_report"""
     result = report_service.get_rider_report(registration_id, g.current_user_id)
     return success(result)
+
+
+# =============================================
+# 人员 D：Evidence Timeline（Rider 视角）
+# =============================================
+
+@rider_bp.route(
+    "/api/v1/rider/race-projects/<int:race_project_id>/timeline",
+    methods=["GET"],
+)
+@require_auth
+@require_role("rider")
+@require_own_race_project()
+def get_my_timeline(race_project_id):
+    """Rider 查看自己的 Evidence Timeline"""
+    events = timeline_service.get_timeline(race_project_id, g.current_user_id)
+    return success(events)
