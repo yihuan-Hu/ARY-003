@@ -354,6 +354,53 @@ button, a, input, textarea, select {
 .auth-card button[type="submit"]:hover { background: var(--blue-800); }
 .auth-card button[type="submit"]:disabled { opacity: 0.6; cursor: not-allowed; }
 
+.auth-switch {
+  text-align: center;
+  margin-top: 18px;
+  font-size: 14px;
+  color: var(--muted);
+}
+.auth-switch a { color: var(--blue-700); font-weight: 600; }
+
+/* ---- Role Selector (Registration) ---- */
+.role-radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.role-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 2px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+}
+.role-option:hover { background: var(--blue-100); }
+.role-option.active {
+  border-color: var(--blue-700);
+  background: var(--blue-100);
+}
+.role-option input[type="radio"] {
+  width: 18px; height: 18px;
+  accent-color: var(--blue-700);
+  flex: 0 0 auto;
+  margin: 0;
+}
+.role-label {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+  min-width: 80px;
+}
+.role-desc {
+  font-size: 12px;
+  color: var(--muted);
+}
+
 /* ---- Profile ---- */
 .profile-layout {
   display: grid;

@@ -20,6 +20,75 @@ auth_bp = Blueprint("auth", __name__)
 user_dao = UserDAO()
 
 
+# ---- 注册 ----
+
+@auth_bp.route("/api/v1/auth/register", methods=["POST"])
+def register():
+    """用户注册：校验用户名唯一性、密码复杂度、确认密码一致性"""
+    body = request.get_json(silent=True) or {}
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+    confirm_password = body.get("confirm_password") or ""
+
+    # 1. 非空校验
+    if not username or not password or not confirm_password:
+        raise ValidationError("Username, password, and confirm_password are required")
+
+    # 2. 两次密码一致
+    if password != confirm_password:
+        raise ValidationError("Passwords do not match")
+
+    # 3. 用户名格式校验（字母数字下划线，不允许纯数字开头）
+    import re
+    if not re.match(r'^[a-zA-Z][a-zA-Z0-9_]{2,63}$', username):
+        raise ValidationError(
+            "Username must be 3-64 characters, start with a letter, "
+            "and contain only letters, digits, and underscores"
+        )
+
+    # 4. 用户名唯一性校验
+    if user_dao.find_by_username(username) is not None:
+        raise ValidationError("Username already exists")
+
+    # 5. 密码哈希（内部强制复杂度校验：≥8位、含大小写字母+数字）
+    from app.utils.auth import hash_password as _hash_password
+    password_hash = _hash_password(password)
+
+    # 6. 角色选择（仅允许 rider 或 organizer）
+    role = (body.get("role") or "rider").strip().lower()
+    if role not in ("rider", "organizer"):
+        raise ValidationError("Role must be 'rider' or 'organizer'")
+    roles = [role]
+
+    # 7. 入库
+    user = user_dao.create(username, password_hash, roles=roles)
+
+    # 8. 自动登录，签发 token
+    access_token = create_token(user["id"], user["username"], roles)
+    refresh_token = create_refresh_token(user["id"])
+
+    audit_log("auth.register.success", user["id"], "user", user["id"])
+
+    resp = make_response(success({
+        "token": access_token,
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "roles": roles,
+        },
+    }, "Registration successful"))
+    resp.set_cookie(
+        "refresh_token",
+        refresh_token,
+        httponly=True,
+        secure=False,
+        samesite="Strict",
+        max_age=7 * 24 * 3600,
+        path="/api/v1/auth",
+    )
+    return resp
+
+
 # ---- 登录 ----
 
 @auth_bp.route("/api/v1/auth/login", methods=["POST"])

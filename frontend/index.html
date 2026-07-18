@@ -3,10 +3,11 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none';" />
+  <!-- CSP handled by nginx in production -->
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <title>ARY - Agent Racing Yard</title>
-  <script src="https://unpkg.com/vue@3/dist/vue.global.prod.js"></script>
+  <script>window.ARY_API_BASE = 'http://localhost:5000';</script>
+  <script src="vue.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -154,6 +155,36 @@
             <div v-if="loginError" class="error-message">{{ loginError }}</div>
             <button type="submit" :disabled="loading.login">{{ loading.login ? 'Logging in...' : 'Login' }}</button>
           </form>
+          <p class="auth-switch">Don't have an account? <a href="#" @click.prevent="navigate('register-auth')">Register here</a></p>
+        </div>
+      </section>
+
+      <!-- 注册 -->
+      <section v-else-if="currentPage==='register-auth'" class="page page-login active">
+        <div class="auth-card glass-card">
+          <h1>Create Account</h1>
+          <form @submit.prevent="doRegisterAuth">
+            <label>Username <input v-model="registerForm.username" placeholder="3-64 chars, letters/digits/underscore" required /></label>
+            <label>Password <input v-model="registerForm.password" type="password" placeholder="Min 8 chars, upper + lower + digit" required /></label>
+            <label>Confirm Password <input v-model="registerForm.confirm_password" type="password" required /></label>
+            <label>I want to join as</label>
+            <div class="role-radio-group">
+              <label class="role-option" :class="{ active: registerForm.role === 'rider' }">
+                <input type="radio" v-model="registerForm.role" value="rider" />
+                <span class="role-label">Rider</span>
+                <span class="role-desc">Participate in races, submit works</span>
+              </label>
+              <label class="role-option" :class="{ active: registerForm.role === 'organizer' }">
+                <input type="radio" v-model="registerForm.role" value="organizer" />
+                <span class="role-label">Organizer</span>
+                <span class="role-desc">Create and manage races</span>
+              </label>
+            </div>
+            <div v-if="registerAuthError" class="error-message">{{ registerAuthError }}</div>
+            <div v-if="registerAuthSuccess" class="success-message">{{ registerAuthSuccess }}</div>
+            <button type="submit" :disabled="loading.registerAuth">{{ loading.registerAuth ? 'Creating account...' : 'Register' }}</button>
+          </form>
+          <p class="auth-switch">Already have an account? <a href="#" @click.prevent="navigate('login')">Login here</a></p>
         </div>
       </section>
 
@@ -367,7 +398,7 @@
             </form>
             <div v-if="raceProjectWorks.length === 0" class="empty-state">No works yet</div>
             <article v-for="w in raceProjectWorks" :key="w.id" class="work-card glass-card">
-              <h3>{{ w.title }} <span class="status-{{ w.work_status }}">{{ w.work_status }}</span></h3>
+              <h3>{{ w.title }} <span :class="'status-' + w.work_status">{{ w.work_status }}</span></h3>
               <p>{{ w.description?.substring(0, 200) }}</p>
               <button v-if="w.work_status==='draft'" @click="submitWork(w.id)">Submit</button>
               <button v-if="w.work_status==='draft'" @click="deleteWork(w.id)" class="danger">Delete</button>
@@ -498,7 +529,7 @@
         <!-- Success -->
         <div v-else class="work-grid">
           <article v-for="w in publicWorks" :key="w.id" class="work-card glass-card" @click="navigate('work', w.id)">
-            <span class="status-{{ w.work_status }}">{{ w.work_status }}</span>
+            <span :class="'status-' + w.work_status">{{ w.work_status }}</span>
             <h2>{{ w.title }}</h2>
             <p>{{ w.description?.substring(0, 150) }}</p>
           </article>
@@ -533,7 +564,7 @@
             <p v-if="currentWork.repo_url"><b>Repo:</b> <a :href="safeUrl(currentWork.repo_url)" target="_blank" rel="noopener noreferrer">{{ currentWork.repo_url }}</a></p>
             <p v-if="currentWork.demo_url"><b>Demo:</b> <a :href="safeUrl(currentWork.demo_url)" target="_blank" rel="noopener noreferrer">{{ currentWork.demo_url }}</a></p>
             <p><b>Version:</b> {{ currentWork.version }}</p>
-            <p><b>Status:</b> <span class="status-{{ currentWork.work_status }}">{{ currentWork.work_status }}</span></p>
+            <p><b>Status:</b> <span :class="'status-' + currentWork.work_status">{{ currentWork.work_status }}</span></p>
           </div>
           <button @click="verifyIntegrity(currentWork.id)">Verify Hash Chain</button>
           <div v-if="integrityResult" class="glass-card">
@@ -578,12 +609,12 @@
           <p>{{ a.work?.description?.substring(0, 150) }}</p>
           <form @submit.prevent="submitJudgment(a.work_id)" class="judgment-form">
             <div class="score-row">
-              <label>Technical <input v-model.number="judgmentForms[a.work_id]?.technical_score" type="number" min="1" max="10" required /></label>
-              <label>Innovation <input v-model.number="judgmentForms[a.work_id]?.innovation_score" type="number" min="1" max="10" required /></label>
-              <label>Presentation <input v-model.number="judgmentForms[a.work_id]?.presentation_score" type="number" min="1" max="10" required /></label>
-              <label>Completeness <input v-model.number="judgmentForms[a.work_id]?.completeness_score" type="number" min="1" max="10" required /></label>
+              <label>Technical <input v-model.number="judgmentForms[a.work_id].technical_score" type="number" min="1" max="10" required /></label>
+              <label>Innovation <input v-model.number="judgmentForms[a.work_id].innovation_score" type="number" min="1" max="10" required /></label>
+              <label>Presentation <input v-model.number="judgmentForms[a.work_id].presentation_score" type="number" min="1" max="10" required /></label>
+              <label>Completeness <input v-model.number="judgmentForms[a.work_id].completeness_score" type="number" min="1" max="10" required /></label>
             </div>
-            <label>Comment <textarea v-model="judgmentForms[a.work_id]?.comment" rows="2"></textarea></label>
+            <label>Comment <textarea v-model="judgmentForms[a.work_id].comment" rows="2"></textarea></label>
             <button type="submit">Submit Judgment</button>
           </form>
         </article>
@@ -761,7 +792,7 @@
           <div v-if="adminTab==='races'">
             <div v-if="adminRaces.length === 0" class="empty-state">No races managed. <button @click="adminTab='create'">Create one</button></div>
             <article v-for="r in adminRaces" :key="r.id" class="glass-card admin-race-card">
-              <h3>{{ r.name }} <span class="status-{{ r.status }}">{{ r.status }}</span></h3>
+              <h3>{{ r.name }} <span :class="'status-' + r.status">{{ r.status }}</span></h3>
               <div class="race-actions">
                 <button v-if="r.status==='draft'" @click="transitionRace(r.id, 'publish')">Publish</button>
                 <button v-if="r.status==='published'" @click="transitionRace(r.id, 'open-registration')">Open Registration</button>

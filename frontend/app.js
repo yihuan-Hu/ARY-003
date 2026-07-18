@@ -2,17 +2,41 @@
 // ARY Frontend Application (Vue 3)
 // =============================================
 
+// DEBUG: 全局错误捕获，显示在页面上方便定位问题
+window.onerror = function(msg, url, line, col, err) {
+  document.body.innerHTML = '<div style="padding:40px;font-family:monospace;color:red;background:#fff;max-width:900px;margin:40px auto;border:2px solid red;border-radius:8px;word-break:break-all"><h2>JS Error</h2><p><b>Message:</b> ' + msg + '</p><p><b>File:</b> ' + url + '</p><p><b>Line:</b> ' + line + ':' + col + '</p><p><b>Stack:</b><pre>' + (err ? err.stack : 'N/A') + '</pre></p><button onclick="location.reload()" style="padding:10px 20px;font-size:16px;cursor:pointer">Reload</button></div>';
+  return true;
+};
+
 const API_BASE = window.ARY_API_BASE || '';
+
+let _csrfToken = null;
 
 function api(path, options = {}) {
   const token = localStorage.getItem('ary_token');
   const headers = { 'Content-Type': 'application/json', ...options.headers };
   if (token) headers['Authorization'] = `Bearer ${token}`;
-  return fetch(`${API_BASE}${path}`, { ...options, headers })
+  const method = (options.method || 'GET').toUpperCase();
+  if (method !== 'GET' && _csrfToken) {
+    headers['X-CSRF-Token'] = _csrfToken;
+  }
+  return fetch(`${API_BASE}${path}`, { ...options, headers, credentials: 'include' })
     .then(async (r) => {
-      const data = await r.json().catch(() => null);
-      if (!r.ok) {
-        const err = new Error(data?.message || data?.error || `HTTP ${r.status}`);
+      // 从 GET 响应中提取 CSRF token
+      if (method === 'GET') {
+        const csrfFromHeader = r.headers.get('X-CSRF-Token');
+        if (csrfFromHeader) _csrfToken = csrfFromHeader;
+      }
+      const ct = r.headers.get('content-type') || '';
+      const isJson = ct.includes('application/json');
+      const data = isJson ? await r.json().catch(() => null) : null;
+      if (!r.ok || !isJson) {
+        const msg =
+          data?.error?.message ||
+          data?.message ||
+          data?.error ||
+          (!isJson ? `Unexpected response (status ${r.status})` : `HTTP ${r.status}`);
+        const err = new Error(msg);
         err.status = r.status;
         err.data = data;
         throw err;
@@ -79,7 +103,7 @@ const app = createApp({
 
     // Loading states
     const loading = reactive({
-      races: false, race: false, login: false, profile: false,
+      races: false, race: false, login: false, registerAuth: false, profile: false,
       registrations: false, dashboard: false, raceProject: false,
       works: false, work: false, judge: false, leaderboard: false,
       rider: false, adminRaces: false,
@@ -99,6 +123,11 @@ const app = createApp({
     // Login
     const loginForm = reactive({ username: '', password: '' });
     const loginError = ref('');
+
+    // Register Auth
+    const registerForm = reactive({ username: '', password: '', confirm_password: '', role: 'rider' });
+    const registerAuthError = ref('');
+    const registerAuthSuccess = ref('');
 
     // Profile
     const profile = ref(null);
@@ -180,7 +209,7 @@ const app = createApp({
     const pageState = reactive({
       // 每页独立状态: 'loading' | 'empty' | 'success' | 'error' | 'unauthorized' | 'forbidden' | 'not-found' | 'offline' | null
       home: null, race: null, login: null, profile: null,
-      register: null, registrations: null, dashboard: null,
+      register: null, 'register-auth': null, registrations: null, dashboard: null,
       raceProject: null, caWizard: null, works: null,
       work: null, judge: null, leaderboard: null,
       riders: null, live: null, admin: null,
@@ -251,6 +280,7 @@ const app = createApp({
         case 'leaderboard': loadRaces(); break;
         case 'admin': loadAdminRaces(); break;
         case 'live': liveRaceId.value = pageParams.id || ''; loadLiveData(); break;
+        case 'register-auth': registerAuthError.value = ''; registerAuthSuccess.value = ''; break;
       }
     }
 
@@ -275,6 +305,36 @@ const app = createApp({
         loginError.value = e.message || 'Login failed';
       } finally {
         loading.login = false;
+      }
+    }
+
+    async function doRegisterAuth() {
+      loading.registerAuth = true;
+      registerAuthError.value = '';
+      registerAuthSuccess.value = '';
+      try {
+        const res = await api('/api/v1/auth/register', {
+          method: 'POST',
+          body: JSON.stringify({
+            username: registerForm.username,
+            password: registerForm.password,
+            confirm_password: registerForm.confirm_password,
+            role: registerForm.role,
+          }),
+        });
+        const t = res.token || res.data?.token;
+        if (t) {
+          localStorage.setItem('ary_token', t);
+          token.value = t;
+          isLoggedIn.value = true;
+          currentUser.value = res.user || res.data?.user;
+          registerAuthSuccess.value = 'Registration successful! Redirecting...';
+          setTimeout(() => navigate('home'), 1000);
+        }
+      } catch (e) {
+        registerAuthError.value = e.message || 'Registration failed';
+      } finally {
+        loading.registerAuth = false;
       }
     }
 
@@ -785,7 +845,17 @@ const app = createApp({
         alert('Race created!');
         adminTab.value = 'races';
         loadAdminRaces();
-      } catch (e) { alert('Create race failed: ' + e.message); }
+      } catch (e) {
+        const msg = e.message || 'Unknown error';
+        alert('Create race failed: ' + msg);
+        if (e.status === 401 || e.status === 403) {
+          localStorage.removeItem('ary_token');
+          token.value = '';
+          isLoggedIn.value = false;
+          currentUser.value = null;
+          navigate('login');
+        }
+      }
     }
 
     async function exportCSV(raceId, type) {
@@ -848,7 +918,9 @@ const app = createApp({
       currentPage, pageParams, isFullScreen, navigate,
       // Auth
       isLoggedIn, currentUser, token, isRider, isOrganizer, isAdmin, isJudge,
-      loginForm, loginError, doLogin, logout,
+      loginForm, loginError, doLogin,
+      registerForm, registerAuthError, registerAuthSuccess, doRegisterAuth,
+      logout,
       // Loading
       loading,
       // Home

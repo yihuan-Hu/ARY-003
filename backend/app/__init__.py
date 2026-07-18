@@ -29,6 +29,7 @@ def create_app(config_class=Config):
         origins=origins,
         supports_credentials=True,
         allow_headers=["Content-Type", "Authorization", "X-CSRF-Token"],
+        expose_headers=["X-CSRF-Token"],
     )
 
     # 数据库
@@ -86,8 +87,10 @@ def create_app(config_class=Config):
             return None
         if request.method not in ("POST", "PUT", "PATCH", "DELETE"):
             return None
-        # 豁免路径：登录使用用户名密码，CA ingest 使用 API Key
+        # 豁免路径：登录/注册使用用户名密码，CA ingest 使用 API Key
         if request.path.startswith("/api/v1/auth/login"):
+            return None
+        if request.path.startswith("/api/v1/auth/register"):
             return None
         if request.path.startswith("/api/v1/ca-connections/") and request.path.endswith("/ingest"):
             return None
@@ -104,7 +107,7 @@ def create_app(config_class=Config):
 
     @app.after_request
     def add_csrf_cookie(response):
-        """为 GET 请求设置 CSRF token cookie"""
+        """为 GET 请求设置 CSRF token cookie，并同步暴露到响应头"""
         if request.method == "GET" and not request.path.startswith("/api/v1/public"):
             csrf_token = getattr(g, "request_id", uuid.uuid4().hex[:12])
             response.set_cookie(
@@ -115,7 +118,8 @@ def create_app(config_class=Config):
                 samesite="Strict",
                 max_age=86400,
             )
-            # 同时注入到 HEAD 响应头，方便前端直接读取
+            # 同时注入响应头，方便跨域前端直接读取
+            response.headers["X-CSRF-Token"] = csrf_token
         return response
 
     @app.after_request
