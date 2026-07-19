@@ -213,6 +213,39 @@ button, a, input, textarea, select {
   box-shadow: var(--shadow);
 }
 
+.demo-quick-panel {
+  max-width: 980px;
+  margin: 32px auto 0;
+  text-align: left;
+}
+
+.demo-quick-panel h2 {
+  text-align: center;
+  margin: 0 0 16px;
+  font-size: 22px;
+}
+
+.demo-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.task-card h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.task-card p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.metric-card {
+  min-height: 112px;
+}
+
 /* ---- Glass Card ---- */
 .glass-card {
   background: var(--glass);
@@ -1187,6 +1220,18 @@ button.small {
   }
 
   .hero-copy h1 { font-size: 32px; }
+
+  .demo-quick-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-actions {
+    flex-wrap: wrap;
+  }
+
+  .ia-nav button {
+    white-space: nowrap;
+  }
 
   .race-grid, .work-grid {
     grid-template-columns: 1fr;

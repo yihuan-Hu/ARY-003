@@ -7,6 +7,11 @@ const apiJs = fs.existsSync('frontend/js/api.js') ? fs.readFileSync('frontend/js
 const constantsJs = fs.existsSync('frontend/js/constants.js') ? fs.readFileSync('frontend/js/constants.js', 'utf8') : '';
 const uxJs = fs.existsSync('frontend/js/ux.js') ? fs.readFileSync('frontend/js/ux.js', 'utf8') : '';
 const finalReview = fs.existsSync('docs/final-review.md') ? fs.readFileSync('docs/final-review.md', 'utf8') : '';
+const demoScript = fs.existsSync('docs/demo-script.md') ? fs.readFileSync('docs/demo-script.md', 'utf8') : '';
+const qualityGate = fs.existsSync('docs/quality-gate.md') ? fs.readFileSync('docs/quality-gate.md', 'utf8') : '';
+const seedDemo = fs.existsSync('scripts/seed_demo.py') ? fs.readFileSync('scripts/seed_demo.py', 'utf8') : '';
+const smokeCheck = fs.existsSync('scripts/smoke_check.py') ? fs.readFileSync('scripts/smoke_check.py', 'utf8') : '';
+const componentsJs = fs.existsSync('frontend/js/components.js') ? fs.readFileSync('frontend/js/components.js', 'utf8') : '';
 const visibleText = html
   .replace(/<!--[\s\S]*?-->/g, ' ')
   .replace(/{{[\s\S]*?}}/g, ' ')
@@ -145,6 +150,19 @@ assert(!app.includes('function api(path'), 'app.js must not own the low-level AP
 assert(!app.includes('function statusLabel(status)'), 'app.js must not own status label constants');
 assert(finalReview.includes('系统架构') && finalReview.includes('测试证据') && finalReview.includes('创新点'), 'Final review document must summarize architecture, tests, and innovation');
 
-console.log(`UX audit passed — ${MUST_NOT_HAVE.length + 22} checks OK`);
+// ============================================================
+// 6. 95 分展示与验收资产
+// ============================================================
+assert(seedDemo.includes('DEMO_USERS') && seedDemo.includes('seed_demo'), 'scripts/seed_demo.py must seed named demo users and data');
+assert(smokeCheck.includes('SMOKE_STEPS') && smokeCheck.includes('/api/v1/auth/login'), 'scripts/smoke_check.py must document executable smoke API steps');
+assert(demoScript.includes('演示路线 A') && demoScript.includes('演示路线 B') && demoScript.includes('演示路线 C'), 'docs/demo-script.md must provide rider/organizer/judge demo routes');
+assert(qualityGate.includes('质量门禁') && qualityGate.includes('node frontend') && qualityGate.includes('pytest'), 'docs/quality-gate.md must list quality gate commands');
+assert(componentsJs.includes("app.component('task-card'") && componentsJs.includes("app.component('metric-card'") && componentsJs.includes("app.component('page-state'"), 'frontend/js/components.js must register task-card, metric-card, and page-state');
+assert(html.includes('js/components.js'), 'index.html must load component registrations');
+assert(html.includes('<metric-card') && html.includes('<task-card'), 'Home/workspace UI must use extracted components');
+assert(html.includes('期末演示入口') && html.includes('参赛流程') && html.includes('评审流程'), 'Home page must expose demo-ready first-screen actions');
+assert(fs.readFileSync('frontend/styles.css', 'utf8').includes('.demo-quick-grid') && fs.readFileSync('frontend/styles.css', 'utf8').includes('grid-template-columns: repeat(2, minmax(0, 1fr))'), 'styles.css must include mobile-friendly demo grid polish');
+
+console.log(`UX audit passed — ${MUST_NOT_HAVE.length + 31} checks OK`);
 console.log(`English violations to review (may be false positives): ${violations.length}`);
 if (violations.length) violations.slice(0, 15).forEach(v => console.log('  ', v));

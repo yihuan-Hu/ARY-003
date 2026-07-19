@@ -25,10 +25,23 @@ ARY 采用前后端分离的赛事平台架构。后端按 Route / Service / DAO
 ```bash
 node frontend/ux-audit.test.js
 node --check frontend/app.js
+node --check frontend/js/components.js
+python -m py_compile scripts/seed_demo.py scripts/smoke_check.py
 pytest
 ```
 
 已有状态看板记录了多轮专项测试，包括认证安全、赛事核心、评审奖项、CA 链路、OpenAPI 和 CI/CD。全量测试曾达到 `183 passed, 0 failed`。
+
+## 演示与验收资产
+
+项目新增两类期末展示资产：
+
+| 文件 | 用途 |
+| --- | --- |
+| `scripts/seed_demo.py` | 一键生成 admin / organizer / rider / judge 演示账号、报名赛、决赛、作品、评审、奖项、CA 与 Live Hall 数据 |
+| `scripts/smoke_check.py` | 对运行中的后端执行登录、公开赛事、报名列表、组织者赛事、评审清单等核心 API 冒烟检查 |
+| `docs/demo-script.md` | 给答辩和助教验收使用的逐步演示路线 |
+| `docs/quality-gate.md` | 提交前质量门禁、前端门禁、后端门禁和安全门禁 |
 
 ## 创新点
 

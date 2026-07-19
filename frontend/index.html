@@ -11,6 +11,7 @@
   <script src="js/api.js"></script>
   <script src="js/constants.js"></script>
   <script src="js/ux.js"></script>
+  <script src="js/components.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -84,6 +85,26 @@
               <button @click="navigate('race', featuredRace?.id)" v-if="featuredRace">查看赛事</button>
               <button @click="navigate('live', featuredRace?.id)" v-if="featuredRace">直播大厅</button>
             </div>
+            <section class="demo-quick-panel">
+              <h2>期末演示入口</h2>
+              <div class="demo-quick-grid">
+                <task-card title="参赛流程" desc="报名、进入参赛项目、配置 CA、提交作品。">
+                  <button @click="navigate('dashboard')" v-if="isLoggedIn">进入参与工作区</button>
+                  <button @click="navigate('login')" v-else>登录后演示</button>
+                </task-card>
+                <task-card title="组织流程" desc="审核报名、推进赛事状态、导出 CSV 和创建奖项。">
+                  <button @click="navigate('admin')" v-if="isLoggedIn">进入组织工作区</button>
+                  <button @click="navigate('login')" v-else>登录后演示</button>
+                </task-card>
+                <task-card title="评审流程" desc="接受评委邀请、查看待评分作品、提交评分。">
+                  <button @click="navigate('judge')" v-if="isLoggedIn">进入评审清单</button>
+                  <button @click="navigate('login')" v-else>登录后演示</button>
+                </task-card>
+                <task-card title="直播与榜单" desc="查看 Live Hall、公开作品和最终榜单。">
+                  <button @click="navigate('leaderboard')">查看榜单</button>
+                </task-card>
+              </div>
+            </section>
           </section>
           <section class="race-list">
             <div class="filter-bar">
@@ -142,9 +163,9 @@
             </div>
           </section>
           <section class="race-state-grid">
-            <article class="state-card"><span>参赛人数</span><b>{{ currentRace.participant_count || 0 }}</b></article>
-            <article class="state-card"><span>公开作品</span><b>{{ currentRace.public_work_count || 0 }}</b></article>
-            <article class="state-card"><span>评审模式</span><b>{{ currentRace.judging_mode === 'open' ? '公开评审' : '盲审' }}</b></article>
+            <metric-card label="参赛人数" :value="currentRace.participant_count || 0"></metric-card>
+            <metric-card label="公开作品" :value="currentRace.public_work_count || 0"></metric-card>
+            <metric-card label="评审模式" :value="currentRace.judging_mode === 'open' ? '公开评审' : '盲审'"></metric-card>
           </section>
         </template>
       </section>
@@ -335,21 +356,15 @@
               <span class="status-note">按报名、作品提交和评审任务整理你的待处理事项。</span>
             </div>
             <div class="dashboard-grid">
-              <article class="glass-card">
-                <h3>报名记录</h3>
-                <p>{{ myRegistrations.length }} 条报名</p>
+              <task-card title="报名记录" :desc="myRegistrations.length + ' 条报名'">
                 <button @click="navigate('registrations')">查看报名</button>
-              </article>
-              <article class="glass-card">
-                <h3>可提交作品</h3>
-                <p>{{ myRaceProjects.length }} 个参赛项目</p>
+              </task-card>
+              <task-card title="可提交作品" :desc="myRaceProjects.length + ' 个参赛项目'">
                 <button @click="navigate('home')">继续参赛</button>
-              </article>
-              <article class="glass-card">
-                <h3>评审任务</h3>
-                <p>{{ judgeAssignments.length + judgeInvitations.length }} 项评委相关任务</p>
+              </task-card>
+              <task-card title="评审任务" :desc="(judgeAssignments.length + judgeInvitations.length) + ' 项评委相关任务'">
                 <button v-if="judgeAssignments.length" @click="navigate('judge')">进入评审</button>
-              </article>
+              </task-card>
             </div>
           </section>
 

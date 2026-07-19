@@ -987,4 +987,6 @@ const app = createApp({
   },
 });
 
+window.ARYComponents.register(app);
+
 app.mount('#app');
