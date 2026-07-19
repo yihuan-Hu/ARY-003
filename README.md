@@ -26,6 +26,7 @@ python run.py
 ### Docker 一键启动
 
 ```bash
+# 从项目根目录执行
 docker-compose up
 ```
 
@@ -65,7 +66,6 @@ backend/
 │   ├── services/       # 业务逻辑层
 │   ├── routes/         # 蓝图路由（auth/rider/organizer/public/judge/admin/ca/notification）
 │   ├── utils/          # 工具（auth/permissions/rate_limit/logging/validation/errors/response）
-│   └── schemas/        # marshmallow schema
 ├── tests/              # 全量测试（183 passed）
 │   ├── legacy/         # 旧层回归测试（21 passed）
 │   └── ...
