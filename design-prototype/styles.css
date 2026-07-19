@@ -62,11 +62,11 @@ p {
 
 .deck-shell {
   width: min(100vw, 1920px);
-  min-height: 100vh;
+  height: 100vh;
   margin: 0 auto;
   padding: 26px 32px 24px;
   position: relative;
-  overflow: visible;
+  overflow: hidden;
 }
 
 .deck-shell::before,
