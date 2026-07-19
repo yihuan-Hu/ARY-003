@@ -1,6 +1,28 @@
 from marshmallow import Schema, fields, validate
 
 
+# =============================================
+# 用户注册
+# =============================================
+
+class RegisterSchema(Schema):
+    """用户注册请求校验"""
+    username = fields.Str(
+        required=True,
+        validate=validate.Length(min=3, max=64),
+    )
+    password = fields.Str(
+        required=True,
+        validate=validate.Length(min=8, max=128),
+    )
+    confirm_password = fields.Str(
+        required=True,
+        validate=validate.Length(min=8, max=128),
+    )
+
+
+# =============================================
+
 class RaceCreateSchema(Schema):
     name = fields.Str(required=True, validate=validate.Length(min=1, max=200))
     slug = fields.Str(load_default="", validate=validate.Length(max=200))
