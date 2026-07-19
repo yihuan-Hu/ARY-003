@@ -186,7 +186,8 @@ function renderWorkCards(works) {
         if (work.awardIds && work.awardIds.length) badge = "已获奖";
         else if (race && race.status === "judging") badge = "评审中";
         else if (work.status === "submitted" || work.status === "published") badge = "精选";
-        return '<article class="work-card' + heroClass + '"><span>' + badge + '</span><h2>' + escapeHtml(work.title) + '</h2><p>' + escapeHtml(work.summary) + '</p><b>' + escapeHtml(race ? race.title : "") + ' / ' + escapeHtml(work.status) + '</b><button type="button">查看详情</button></article>';
+        var workStatusText = { draft: "草稿", submitted: "已提交", published: "已发布", locked: "已锁定" }[work.status] || work.status;
+        return '<article class="work-card' + heroClass + '"><span>' + badge + '</span><h2>' + escapeHtml(work.title) + '</h2><p>' + escapeHtml(work.summary) + '</p><b>' + escapeHtml(race ? race.title : "") + ' / ' + workStatusText + '</b><button type="button">查看详情</button></article>';
       })
       .join(""),
   );
