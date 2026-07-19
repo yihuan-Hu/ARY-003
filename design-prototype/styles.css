@@ -28,7 +28,8 @@ html {
 body {
   margin: 0;
   min-height: 100vh;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   background:
     radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.95) 0 24%, transparent 46%),
     linear-gradient(115deg, rgba(18, 119, 255, 0.08), transparent 38%),
@@ -61,11 +62,11 @@ p {
 
 .deck-shell {
   width: min(100vw, 1920px);
-  height: min(100vh, 1080px);
+  min-height: 100vh;
   margin: 0 auto;
   padding: 26px 32px 24px;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .deck-shell::before,
@@ -217,7 +218,8 @@ p {
   position: absolute;
   inset: 0;
   display: none;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .page.active {
