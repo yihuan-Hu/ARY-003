@@ -197,16 +197,13 @@ function renderWorksFiltered(filterText) {
   filterText = (filterText || "").replace(/\s/g, "");
   var filtered;
   if (filterText.indexOf("精选") >= 0) {
-    // 精选 = 已提交/已发布/已获奖（排除纯草稿）
-    filtered = allWorksFilter.filter(function (w) {
-      return w.status !== "draft" || (w.awardIds && w.awardIds.length > 0);
-    });
+    // 精选 = 只显示首页 hero 作品
+    filtered = allWorksFilter.filter(function (w) { return w.id === "work-gba-wander"; });
   } else if (filterText.indexOf("已获奖") >= 0) {
     filtered = allWorksFilter.filter(function (w) { return w.awardIds && w.awardIds.length > 0; });
   } else if (filterText.indexOf("评审") >= 0) {
     filtered = allWorksFilter.filter(function (w) { var r = getRace(w.raceId); return r && r.status === "judging"; });
   } else {
-    // "全部公开作品" 或其他 → 显示全部
     filtered = allWorksFilter;
   }
   renderWorkCards(filtered);
