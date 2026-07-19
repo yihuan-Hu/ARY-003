@@ -21,15 +21,7 @@
 * A 接口契约：`docs/contracts.md`
 * B 上游契约：`docs/b-upstream-contracts-for-cd.md`
 * 文档路由：`docs/README.md`
-* 近期窗口：`PLAN.md`
 * 任务看板：`STATUS.md`
-
-## 旧文档（已归档，不可引用）
-
-以下文档已移至 `docs/archive/`，Agent 不应再引用：
-* `docs/archive/ary.plan.md`（旧任务定义，由 `team-division.md` 替代）
-* `docs/archive/ux-hifi.taskbook.md`（原型阶段已完成）
-* `docs/archive/registration-ca-rules-alignment.taskbook.md`（整改已合并）
 
 ## 执行纪律
 
