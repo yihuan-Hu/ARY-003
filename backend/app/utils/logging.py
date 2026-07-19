@@ -2,12 +2,9 @@
 结构化日志 + 审计日志 + 日志脱敏（人员 A 交付）
 """
 import json
-import re
 import time
-import uuid
-from functools import wraps
 
-from flask import g, request, current_app
+from flask import g, request
 
 _SENSITIVE_FIELDS = {"token", "password", "password_hash", "api_key", "secret"}
 
@@ -32,8 +29,6 @@ def request_log():
     结构化 HTTP 请求日志（在 after_request 中调用）。
     格式: timestamp method path status_code duration_ms user_id request_id
     """
-    from app.database import get_db
-
     duration_ms = int((time.time() - g.get("_request_start", time.time())) * 1000)
 
     log_entry = {

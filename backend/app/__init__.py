@@ -163,22 +163,30 @@ def create_app(config_class=Config):
 
     # ---- 蓝图 ----
 
-    from app.routes.auth import auth_bp
-    from app.routes.rider import rider_bp
-    from app.routes.organizer import organizer_bp
-    from app.routes.public import public_bp
-    from app.routes.notification import notification_bp
-    from app.routes.judge import judge_bp
-    from app.routes.admin import admin_bp
-    from app.routes.ca import ca_bp
+    # ---- 蓝图（按交付顺序注册；尚未交付的 B/C/D 蓝图跳过） ----
 
-    app.register_blueprint(auth_bp)
-    app.register_blueprint(rider_bp)
-    app.register_blueprint(organizer_bp)
-    app.register_blueprint(public_bp)
-    app.register_blueprint(notification_bp)
-    app.register_blueprint(judge_bp)
-    app.register_blueprint(admin_bp)
-    app.register_blueprint(ca_bp)
+    _BLUEPRINTS = [
+        # (module_path, blueprint_name, owner)
+        ("app.routes.auth", "auth_bp", "A"),
+        ("app.routes.rider", "rider_bp", "B"),
+        ("app.routes.organizer", "organizer_bp", "B"),
+        ("app.routes.notification", "notification_bp", "A"),
+        ("app.routes.public", "public_bp", "B"),
+        ("app.routes.judge", "judge_bp", "C"),
+        ("app.routes.admin", "admin_bp", "C"),
+        ("app.routes.ca", "ca_bp", "D"),
+    ]
+
+    import importlib
+    for module_path, bp_name, owner in _BLUEPRINTS:
+        try:
+            mod = importlib.import_module(module_path)
+            bp = getattr(mod, bp_name)
+            app.register_blueprint(bp)
+        except (ImportError, ModuleNotFoundError) as exc:
+            if "No module named" in str(exc) or "cannot import" in str(exc) or "could not import" in str(exc):
+                print(f"[ARY] Skipping blueprint '{bp_name}' ({owner}): not yet delivered")
+            else:
+                raise
 
     return app

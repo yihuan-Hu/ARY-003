@@ -3,7 +3,7 @@
 提供 send() 供 B/C/D 在关键事件时调用。
 """
 from app.dao.notification_dao import NotificationDAO
-from app.utils.errors import NotFoundError, ForbiddenError
+from app.utils.errors import NotFoundError
 
 
 class NotificationService:
