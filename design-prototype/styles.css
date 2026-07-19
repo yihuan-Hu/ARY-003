@@ -1199,7 +1199,6 @@ p {
 }
 
 .hero-work {
-  grid-row: span 2;
   background:
     linear-gradient(135deg, rgba(8, 91, 236, 0.94), rgba(48, 216, 255, 0.62)),
     var(--blue-700);
@@ -1214,7 +1213,6 @@ p {
 
 .hero-work h2 {
   color: #fff;
-  font-size: 54px;
 }
 
 .asset-matrix,
