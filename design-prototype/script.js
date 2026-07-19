@@ -262,16 +262,43 @@ function renderPrototypeData() {
       .join(""),
   );
 
-  const selectedWorks = ["work-gba-wander", "work-localjoy", "work-ary-forge", "work-media-loop"].map(getWork);
-  html(
-    ".work-grid",
-    selectedWorks
-      .map((work, index) => {
-        const race = getRace(work.raceId);
-        return `<article class="work-card ${index === 0 ? "hero-work" : ""}"><span>${index === 0 ? "精选作品" : statusText(race.status)}</span><h2>${escapeHtml(work.title)}</h2><p>${escapeHtml(work.summary)}</p><b>${escapeHtml(race.title)} / ${escapeHtml(work.status)}</b><button type="button">查看详情</button></article>`;
-      })
-      .join(""),
-  );
+  // ---- Works 筛选 ----
+  var allWorks = ["work-gba-wander", "work-localjoy", "work-ary-forge", "work-media-loop"].map(getWork);
+
+  function renderWorkCards(works) {
+    html(
+      ".work-grid",
+      works
+        .map(function (work, index) {
+          var race = getRace(work.raceId);
+          var badge = "作品";
+          if (work.awardIds && work.awardIds.length) badge = "已获奖";
+          else if (race && race.status === "judging") badge = "评审中";
+          else if (work.status === "submitted" || work.status === "published") badge = "精选";
+          var heroClass = badge === "精选" ? " hero-work" : "";
+          return '<article class="work-card' + heroClass + '"><span>' + badge + '</span><h2>' + escapeHtml(work.title) + '</h2><p>' + escapeHtml(work.summary) + '</p><b>' + escapeHtml(race ? race.title : "") + ' / ' + escapeHtml(work.status) + '</b><button type="button">查看详情</button></article>';
+        })
+        .join(""),
+    );
+  }
+
+  function renderWorksFiltered(filterText) {
+    var filtered;
+    if (filterText === "精选") {
+      filtered = allWorks.filter(function (w) {
+        return w.status === "submitted" || w.status === "published" || (w.awardIds && w.awardIds.length);
+      });
+    } else if (filterText === "已获奖") {
+      filtered = allWorks.filter(function (w) { return w.awardIds && w.awardIds.length; });
+    } else if (filterText === "评审中") {
+      filtered = allWorks.filter(function (w) { var r = getRace(w.raceId); return r && r.status === "judging"; });
+    } else {
+      filtered = allWorks;
+    }
+    renderWorkCards(filtered);
+  }
+
+  renderWorkCards(allWorks);
 
   text(".page-works .module-title .section-kicker", "湾区开心游 / 作品墙");
   text(".page-works .module-title h1", "湾区开心游作品墙");
@@ -427,6 +454,7 @@ document.addEventListener("click", (event) => {
   if (worksFilter) {
     document.querySelectorAll(".works-toolbar button").forEach(function (btn) { btn.classList.remove("active"); });
     worksFilter.classList.add("active");
+    renderWorksFiltered(worksFilter.textContent.trim());
     return;
   }
 
