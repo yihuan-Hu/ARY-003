@@ -19,23 +19,23 @@
         <span><strong>Agent Racing Yard</strong><small>骑行智能体 纵横三万里</small></span>
       </a>
       <nav class="ia-nav">
-        <button :class="{active: currentPage==='home'}" @click="navigate('home')">Races</button>
-        <button :class="{active: currentPage==='works'}" @click="navigate('works')">Works</button>
-        <button :class="{active: currentPage==='riders'}" @click="navigate('riders')">Riders</button>
-        <button :class="{active: currentPage==='leaderboard'}" @click="navigate('leaderboard')">Leaderboard</button>
+        <button :class="{active: currentPage==='home'}" @click="navigate('home')">赛事</button>
+        <button :class="{active: currentPage==='works'}" @click="navigate('works')">作品</button>
+        <button :class="{active: currentPage==='riders'}" @click="navigate('riders')">骑手</button>
+        <button :class="{active: currentPage==='leaderboard'}" @click="navigate('leaderboard')">榜单</button>
         <template v-if="isLoggedIn">
-          <button :class="{active: currentPage==='dashboard'}" @click="navigate('dashboard')">Dashboard</button>
-          <button v-if="isOrganizer" :class="{active: currentPage==='admin'}" @click="navigate('admin')">Console</button>
+          <button :class="{active: currentPage==='dashboard'}" @click="navigate('dashboard')">我参与的比赛</button>
+          <button :class="{active: currentPage==='admin'}" @click="navigate('admin')">我组织的比赛</button>
         </template>
       </nav>
       <div class="workspace-entry">
         <template v-if="isLoggedIn">
           <span class="user-badge">{{ currentUser?.username }}</span>
-          <button @click="navigate('profile')">Profile</button>
-          <button @click="logout">Logout</button>
+          <button @click="navigate('profile')">个人资料</button>
+          <button @click="logout">退出</button>
         </template>
         <template v-else>
-          <button @click="navigate('login')">Login</button>
+          <button @click="navigate('login')">登录</button>
         </template>
       </div>
     </header>
@@ -132,9 +132,10 @@
             <h1>{{ currentRace.name }}</h1>
             <p class="race-summary">{{ currentRace.description }}</p>
             <div class="race-cta-row">
-              <button @click="navigate('live', currentRace.id)">Live Hall</button>
-              <button @click="registerForRace(currentRace.id)" v-if="isLoggedIn && isRider && currentRace.status==='registration'">Register</button>
-              <button @click="navigate('works')">View Works</button>
+              <button @click="navigate('live', currentRace.id)">直播大厅</button>
+              <button @click="registerForRace(currentRace.id)" v-if="isLoggedIn && currentRace.status==='registration'">立即报名</button>
+              <button @click="navigate('login')" v-else-if="!isLoggedIn && currentRace.status==='registration'">登录后报名</button>
+              <button @click="navigate('works')">查看作品</button>
             </div>
           </section>
           <section class="race-state-grid">
@@ -148,43 +149,48 @@
       <!-- 登录 -->
       <section v-else-if="currentPage==='login'" class="page page-login active">
         <div class="auth-card glass-card">
-          <h1>Login to ARY</h1>
+          <h1>登录 ARY</h1>
           <form @submit.prevent="doLogin">
-            <label>Username <input v-model="loginForm.username" required /></label>
-            <label>Password <input v-model="loginForm.password" type="password" required /></label>
+            <label>用户名 <input v-model="loginForm.username" required /></label>
+            <label>密码 <input v-model="loginForm.password" type="password" required /></label>
             <div v-if="loginError" class="error-message">{{ loginError }}</div>
-            <button type="submit" :disabled="loading.login">{{ loading.login ? 'Logging in...' : 'Login' }}</button>
+            <button type="submit" :disabled="loading.login">{{ loading.login ? '登录中...' : '登录' }}</button>
           </form>
-          <p class="auth-switch">Don't have an account? <a href="#" @click.prevent="navigate('register-auth')">Register here</a></p>
+          <p class="auth-switch">还没有账号？<a href="#" @click.prevent="navigate('register-auth')">立即注册</a></p>
         </div>
       </section>
 
       <!-- 注册 -->
       <section v-else-if="currentPage==='register-auth'" class="page page-login active">
         <div class="auth-card glass-card">
-          <h1>Create Account</h1>
-          <form @submit.prevent="doRegisterAuth">
-            <label>Username <input v-model="registerForm.username" placeholder="3-64 chars, letters/digits/underscore" required /></label>
-            <label>Password <input v-model="registerForm.password" type="password" placeholder="Min 8 chars, upper + lower + digit" required /></label>
-            <label>Confirm Password <input v-model="registerForm.confirm_password" type="password" required /></label>
-            <label>I want to join as</label>
+          <div v-if="isLoggedIn" class="empty-state">
+            <h2>已登录</h2>
+            <p>当前账号为 {{ currentUser?.username }}，无需再次注册。</p>
+            <button @click="navigate('dashboard')">进入我参与的比赛</button>
+          </div>
+          <form v-else @submit.prevent="doRegisterAuth">
+            <h1>创建账号</h1>
+            <label>用户名 <input v-model="registerForm.username" placeholder="3-64 位，字母/数字/下划线" required /></label>
+            <label>密码 <input v-model="registerForm.password" type="password" placeholder="至少 8 位，含大小写字母和数字" required /></label>
+            <label>确认密码 <input v-model="registerForm.confirm_password" type="password" required /></label>
+            <label>加入身份</label>
             <div class="role-radio-group">
               <label class="role-option" :class="{ active: registerForm.role === 'rider' }">
                 <input type="radio" v-model="registerForm.role" value="rider" />
-                <span class="role-label">Rider</span>
-                <span class="role-desc">Participate in races, submit works</span>
+                <span class="role-label">骑手</span>
+                <span class="role-desc">报名参赛并提交作品</span>
               </label>
               <label class="role-option" :class="{ active: registerForm.role === 'organizer' }">
                 <input type="radio" v-model="registerForm.role" value="organizer" />
-                <span class="role-label">Organizer</span>
-                <span class="role-desc">Create and manage races</span>
+                <span class="role-label">组织者</span>
+                <span class="role-desc">创建并管理赛事</span>
               </label>
             </div>
             <div v-if="registerAuthError" class="error-message">{{ registerAuthError }}</div>
             <div v-if="registerAuthSuccess" class="success-message">{{ registerAuthSuccess }}</div>
-            <button type="submit" :disabled="loading.registerAuth">{{ loading.registerAuth ? 'Creating account...' : 'Register' }}</button>
+            <button type="submit" :disabled="loading.registerAuth">{{ loading.registerAuth ? '创建中...' : '注册' }}</button>
           </form>
-          <p class="auth-switch">Already have an account? <a href="#" @click.prevent="navigate('login')">Login here</a></p>
+          <p v-if="!isLoggedIn" class="auth-switch">已有账号？<a href="#" @click.prevent="navigate('login')">去登录</a></p>
         </div>
       </section>
 
@@ -259,101 +265,153 @@
 
       <!-- 我的报名 -->
       <section v-else-if="currentPage==='registrations'" class="page page-registrations active">
-        <h1>My Registrations</h1>
+        <h1>报名记录</h1>
 
         <!-- Unauthorized -->
         <div v-if="pageState.registrations==='unauthorized'" class="error-state">
-          <h2>Please login</h2>
-          <p>You need to be logged in to view your registrations.</p>
-          <button @click="navigate('login')">Login</button>
+          <h2>请先登录</h2>
+          <p>登录后可以查看自己的报名状态。</p>
+          <button @click="navigate('login')">登录</button>
         </div>
 
         <!-- Loading -->
-        <div v-else-if="pageState.registrations==='loading'" class="loading-state">Loading...</div>
+        <div v-else-if="pageState.registrations==='loading'" class="loading-state">加载中...</div>
 
         <!-- Error -->
         <div v-else-if="pageState.registrations==='error'" class="error-state">
-          <h2>Failed to load registrations</h2>
+          <h2>报名记录加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadMyRegistrations()">Retry</button>
+          <button @click="loadMyRegistrations()">重试</button>
         </div>
 
         <!-- Empty -->
-        <div v-else-if="pageState.registrations==='empty'" class="empty-state">No registrations yet. <button @click="navigate('home')">Browse races</button></div>
+        <div v-else-if="pageState.registrations==='empty'" class="empty-state">还没有报名记录。<button @click="navigate('home')">浏览赛事</button></div>
 
         <!-- Success -->
         <div v-else class="reg-list">
           <article v-for="reg in myRegistrations" :key="reg.id" class="glass-card">
-            <span :class="'status-'+reg.status">{{ reg.status }}</span>
+            <span :class="'status-'+reg.status">{{ statusLabel(reg.status) }}</span>
             <b>Race #{{ reg.race_id }}</b>
-            <p>Submitted: {{ reg.submitted_at }}</p>
+            <p>状态：{{ statusLabel(reg.status) }}</p>
+            <p>提交时间：{{ reg.submitted_at }}</p>
           </article>
         </div>
       </section>
 
       <!-- 我的工作区 / RaceProject -->
       <section v-else-if="currentPage==='dashboard'" class="page page-dashboard active">
-        <h1>My Dashboard</h1>
+        <h1>我参与的比赛</h1>
 
         <!-- Unauthorized -->
         <div v-if="pageState.dashboard==='unauthorized'" class="error-state">
-          <h2>Please login</h2>
-          <button @click="navigate('login')">Login</button>
+          <h2>请先登录</h2>
+          <button @click="navigate('login')">登录</button>
         </div>
 
         <!-- Loading -->
-        <div v-else-if="pageState.dashboard==='loading'" class="loading-state">Loading...</div>
+        <div v-else-if="pageState.dashboard==='loading'" class="loading-state">加载中...</div>
 
         <!-- Error -->
         <div v-else-if="pageState.dashboard==='error'" class="error-state">
-          <h2>Failed to load dashboard</h2>
+          <h2>参与工作台加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadDashboard()">Retry</button>
+          <button @click="loadDashboard()">重试</button>
+        </div>
+
+        <div v-else-if="pageState.dashboard==='empty'" class="empty-state">
+          <h2>还没有参与任何比赛</h2>
+          <p>报名、评委邀请和评审任务都会出现在这里。</p>
+          <button @click="navigate('home')">浏览赛事</button>
         </div>
 
         <!-- Empty / Success -->
         <div v-else>
-          <div class="dashboard-grid">
-            <article class="glass-card" @click="navigate('registrations')">
-              <h2>Registrations</h2>
-              <p>View your race registrations</p>
-            </article>
-            <article v-for="rp in myRaceProjects" :key="rp.id" class="glass-card" @click="navigate('race-project', rp.id)">
-              <h2>Race Project #{{ rp.id }}</h2>
-              <p>Health: {{ rp.connection_health }}</p>
-            </article>
-            <div v-if="myRaceProjects.length === 0 && pageState.dashboard==='success'" class="empty-state" style="grid-column:1/-1">No active race projects. Register for a race to get started.</div>
-          </div>
+          <section class="dashboard-section">
+            <div class="section-head">
+              <h2>报名记录</h2>
+              <button @click="navigate('registrations')">查看全部</button>
+            </div>
+            <div v-if="myRegistrations.length === 0" class="empty-state">暂无报名记录。<button @click="navigate('home')">去报名</button></div>
+            <div v-else class="dashboard-grid">
+              <article v-for="reg in myRegistrations" :key="'reg-'+reg.id" class="glass-card">
+                <span :class="'status-'+reg.status">{{ statusLabel(reg.status) }}</span>
+                <h3>{{ reg.race?.name || '赛事 #' + reg.race_id }}</h3>
+                <p>报名状态：{{ statusLabel(reg.status) }}</p>
+                <button v-if="reg.status==='approved'" @click="navigate('dashboard')">查看参赛项目</button>
+                <button v-else @click="navigate('race', reg.race_id)">查看赛事</button>
+              </article>
+            </div>
+          </section>
+
+          <section class="dashboard-section">
+            <div class="section-head">
+              <h2>参赛项目</h2>
+            </div>
+            <div v-if="myRaceProjects.length === 0" class="empty-state">通过报名后，作品提交入口会出现在这里。</div>
+            <div v-else class="dashboard-grid">
+              <article v-for="rp in myRaceProjects" :key="'rp-'+rp.id" class="glass-card" @click="navigate('race-project', rp.id)">
+                <h3>{{ rp.race?.name || 'Race Project #' + rp.id }}</h3>
+                <p>连接健康：{{ rp.connection_health || 'unknown' }}</p>
+                <p>提交状态：{{ statusLabel(rp.aggregate_ingestion_status) }}</p>
+                <button @click.stop="navigate('race-project', rp.id)">提交作品</button>
+              </article>
+            </div>
+          </section>
+
+          <section class="dashboard-section">
+            <div class="section-head">
+              <h2>评委身份</h2>
+              <button @click="navigate('judge')" v-if="judgeAssignments.length">进入评审清单</button>
+            </div>
+            <div v-if="judgeInvitations.length === 0 && judgeAssignments.length === 0" class="empty-state">暂无评委邀请或评审任务。</div>
+            <div v-else class="dashboard-grid">
+              <article v-for="inv in judgeInvitations" :key="'inv-'+inv.id" class="glass-card">
+                <span :class="'status-'+inv.status">{{ statusLabel(inv.status) }}</span>
+                <h3>评委邀请</h3>
+                <p>{{ inv.race?.name || '赛事 #' + inv.race_id }}</p>
+                <p>接受后进入评审清单。</p>
+                <div class="card-actions" v-if="inv.status==='pending' || !inv.status">
+                  <button @click="acceptJudgeInvitation(inv.id)">接受</button>
+                  <button class="danger" @click="rejectJudgeInvitation(inv.id)">拒绝</button>
+                </div>
+              </article>
+              <article v-for="a in judgeAssignments" :key="'judge-'+a.work_id" class="glass-card" @click="navigate('judge')">
+                <h3>{{ a.work?.title || '作品 #' + a.work_id }}</h3>
+                <p>待评审任务</p>
+                <button @click.stop="navigate('judge')">去评分</button>
+              </article>
+            </div>
+          </section>
         </div>
       </section>
 
       <!-- RaceProject 工作区 -->
       <section v-else-if="currentPage==='race-project'" class="page page-race-project active">
-        <h1>Race Project #{{ currentRaceProjectId }}</h1>
+        <h1>参赛项目 #{{ currentRaceProjectId }}</h1>
 
         <!-- Loading -->
-        <div v-if="pageState.raceProject==='loading'" class="loading-state">Loading...</div>
+        <div v-if="pageState.raceProject==='loading'" class="loading-state">加载中...</div>
 
         <!-- Not Found -->
         <div v-else-if="pageState.raceProject==='not-found'" class="error-state">
-          <h2>Race Project not found</h2>
+          <h2>参赛项目不存在</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="navigate('dashboard')">Back to Dashboard</button>
+          <button @click="navigate('dashboard')">返回我参与的比赛</button>
         </div>
 
         <!-- Error / Unauthorized -->
         <div v-else-if="pageState.raceProject==='error' || pageState.raceProject==='unauthorized' || pageState.raceProject==='forbidden'" class="error-state">
-          <h2>{{ pageState.raceProject==='unauthorized' ? 'Please login' : pageState.raceProject==='forbidden' ? 'Access denied' : 'Failed to load' }}</h2>
+          <h2>{{ pageState.raceProject==='unauthorized' ? '请先登录' : pageState.raceProject==='forbidden' ? '无权访问' : '加载失败' }}</h2>
           <p>{{ errorMessage }}</p>
-          <button v-if="pageState.raceProject==='unauthorized'" @click="navigate('login')">Login</button>
-          <button v-else @click="loadRaceProject()">Retry</button>
+          <button v-if="pageState.raceProject==='unauthorized'" @click="navigate('login')">登录</button>
+          <button v-else @click="loadRaceProject()">重试</button>
         </div>
 
         <!-- Success -->
         <template v-else-if="raceProject">
           <div class="rp-meta">
-            <span>Status: {{ raceProject.aggregate_ingestion_status }}</span>
-            <span>Health: {{ raceProject.connection_health }}</span>
+            <span>状态：{{ statusLabel(raceProject.aggregate_ingestion_status) }}</span>
+            <span>连接健康：{{ raceProject.connection_health }}</span>
           </div>
 
           <!-- CA 接入列表 -->
@@ -386,22 +444,23 @@
 
           <!-- Works -->
           <section>
-            <h2>Works</h2>
-            <button @click="showCreateWork=true" v-if="!showCreateWork">New Work</button>
+            <h2>作品</h2>
+            <button @click="showCreateWork=true" v-if="!showCreateWork">新建作品草稿</button>
             <form v-if="showCreateWork" @submit.prevent="createWork" class="work-form">
-              <label>Title <input v-model="workForm.title" required /></label>
-              <label>Description <textarea v-model="workForm.description"></textarea></label>
-              <label>Repo URL <input v-model="workForm.repo_url" /></label>
-              <label>Demo URL <input v-model="workForm.demo_url" /></label>
-              <button type="submit">Create Draft</button>
-              <button type="button" @click="showCreateWork=false">Cancel</button>
+              <label>标题 <input v-model="workForm.title" required /></label>
+              <label>说明 <textarea v-model="workForm.description"></textarea></label>
+              <label>仓库 URL <input v-model="workForm.repo_url" /></label>
+              <label>演示 URL <input v-model="workForm.demo_url" /></label>
+              <button type="submit">创建草稿</button>
+              <button type="button" @click="showCreateWork=false">取消</button>
             </form>
-            <div v-if="raceProjectWorks.length === 0" class="empty-state">No works yet</div>
+            <div v-if="raceProjectWorks.length === 0" class="empty-state">还没有作品，先新建草稿再提交。</div>
             <article v-for="w in raceProjectWorks" :key="w.id" class="work-card glass-card">
-              <h3>{{ w.title }} <span :class="'status-' + w.work_status">{{ w.work_status }}</span></h3>
+              <h3>{{ w.title }} <span :class="'status-' + w.work_status">{{ statusLabel(w.work_status) }}</span></h3>
               <p>{{ w.description?.substring(0, 200) }}</p>
-              <button v-if="w.work_status==='draft'" @click="submitWork(w.id)">Submit</button>
-              <button v-if="w.work_status==='draft'" @click="deleteWork(w.id)" class="danger">Delete</button>
+              <p v-if="w.work_status==='draft'" class="status-note">草稿尚未进入评审，请确认内容后提交。</p>
+              <button v-if="w.work_status==='draft'" @click="submitWork(w.id)">提交作品</button>
+              <button v-if="w.work_status==='draft'" @click="deleteWork(w.id)" class="danger">删除草稿</button>
             </article>
           </section>
 
@@ -505,33 +564,34 @@
 
       <!-- 作品列表公开 -->
       <section v-else-if="currentPage==='works'" class="page page-works active">
-        <h1>Works Gallery</h1>
+        <h1>作品广场</h1>
         <div class="filter-bar">
           <select v-model="worksRaceFilter" @change="loadPublicWorks">
-            <option value="">All Races</option>
+            <option value="">选择赛事</option>
             <option v-for="r in races" :key="r.id" :value="r.id">{{ r.name }}</option>
           </select>
         </div>
 
         <!-- Loading -->
-        <div v-if="pageState.works==='loading'" class="loading-state">Loading...</div>
+        <div v-if="pageState.works==='loading'" class="loading-state">加载中...</div>
 
         <!-- Error -->
         <div v-else-if="pageState.works==='error'" class="error-state">
-          <h2>Failed to load works</h2>
+          <h2>作品加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadPublicWorks()">Retry</button>
+          <button @click="loadPublicWorks()">重试</button>
         </div>
 
         <!-- Empty -->
-        <div v-else-if="pageState.works==='empty'" class="empty-state">No works found. Select a race to filter or check back later.</div>
+        <div v-else-if="pageState.works==='empty'" class="empty-state">暂无作品，请先选择赛事或稍后查看。</div>
 
         <!-- Success -->
         <div v-else class="work-grid">
           <article v-for="w in publicWorks" :key="w.id" class="work-card glass-card" @click="navigate('work', w.id)">
-            <span :class="'status-' + w.work_status">{{ w.work_status }}</span>
+            <span :class="'status-' + w.work_status">{{ statusLabel(w.work_status) }}</span>
             <h2>{{ w.title }}</h2>
             <p>{{ w.description?.substring(0, 150) }}</p>
+            <button v-if="w.rider_user_id || w.user_id || w.rider_id" @click.stop="openRiderProfile(w.rider_user_id || w.user_id || w.rider_id)">查看骑手</button>
           </article>
         </div>
       </section>
@@ -622,36 +682,37 @@
 
       <!-- 榜单 -->
       <section v-else-if="currentPage==='leaderboard'" class="page page-leaderboard active">
-        <h1>Leaderboard</h1>
+        <h1>榜单</h1>
         <div class="filter-bar">
           <select v-model="leaderboardRaceId" @change="loadLeaderboard">
-            <option value="">Select Race</option>
+            <option value="">选择赛事</option>
             <option v-for="r in races" :key="r.id" :value="r.id">{{ r.name }}</option>
           </select>
         </div>
 
         <!-- Prompt to select -->
-        <div v-if="!leaderboardRaceId" class="empty-state">Select a race to view its leaderboard</div>
+        <div v-if="!leaderboardRaceId" class="empty-state">选择赛事后查看榜单。</div>
 
         <!-- Loading -->
-        <div v-else-if="pageState.leaderboard==='loading'" class="loading-state">Loading...</div>
+        <div v-else-if="pageState.leaderboard==='loading'" class="loading-state">加载中...</div>
 
         <!-- Error -->
         <div v-else-if="pageState.leaderboard==='error'" class="error-state">
-          <h2>Failed to load leaderboard</h2>
+          <h2>榜单加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadLeaderboard()">Retry</button>
+          <button @click="loadLeaderboard()">重试</button>
         </div>
 
         <!-- Empty -->
-        <div v-else-if="pageState.leaderboard==='empty'" class="empty-state">No results yet</div>
+        <div v-else-if="pageState.leaderboard==='empty'" class="empty-state">暂无结果。</div>
 
         <!-- Success -->
         <ol v-else class="leaderboard-list">
-          <li v-for="entry in leaderboard" :key="entry.position">
-            <span>{{ entry.position }}</span>
-            <b>{{ entry.award_title }}</b>
-            <em>{{ entry.rider_name }}</em>
+          <li v-for="entry in leaderboard" :key="entry.position || entry.rank || entry.work_id">
+            <span>{{ entry.position || entry.rank }}</span>
+            <b>{{ entry.award_title || entry.work_title || '作品 #' + entry.work_id }}</b>
+            <button v-if="entry.rider_user_id || entry.user_id || entry.rider_id" @click="openRiderProfile(entry.rider_user_id || entry.user_id || entry.rider_id)">{{ entry.rider_name || '查看骑手' }}</button>
+            <em v-else>{{ entry.rider_name || '匿名骑手' }}</em>
             <small>{{ entry.work_title }}</small>
           </li>
         </ol>
@@ -659,30 +720,30 @@
 
       <!-- 骑手档案 -->
       <section v-else-if="currentPage==='riders'" class="page page-riders active">
-        <h1>Rider Profiles</h1>
-        <p>Enter a rider ID to view their public profile:</p>
+        <h1>骑手档案</h1>
+        <p>输入骑手用户 ID，或从榜单/作品卡片直接打开公开档案。</p>
         <div class="filter-bar">
-          <input v-model="riderIdLookup" placeholder="Rider ID" type="number" @keyup.enter="loadRiderProfile" />
-          <button @click="loadRiderProfile">Lookup</button>
+          <input v-model="riderIdLookup" placeholder="骑手用户 ID" type="number" @keyup.enter="loadRiderProfile" />
+          <button @click="loadRiderProfile">查询</button>
         </div>
 
         <!-- Prompt -->
-        <div v-if="!riderIdLookup" class="empty-state">Enter a rider ID above to view their profile</div>
+        <div v-if="!riderIdLookup" class="empty-state">输入骑手用户 ID 后查看公开档案。</div>
 
         <!-- Loading -->
-        <div v-else-if="pageState.riders==='loading'" class="loading-state">Loading...</div>
+        <div v-else-if="pageState.riders==='loading'" class="loading-state">加载中...</div>
 
         <!-- Not Found -->
         <div v-else-if="pageState.riders==='not-found'" class="error-state">
-          <h2>Rider not found</h2>
-          <p>No rider profile found for ID #{{ riderIdLookup }}.</p>
+          <h2>未找到骑手</h2>
+          <p>没有找到 ID #{{ riderIdLookup }} 的公开档案。</p>
         </div>
 
         <!-- Error -->
         <div v-else-if="pageState.riders==='error'" class="error-state">
-          <h2>Failed to load profile</h2>
+          <h2>骑手档案加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadRiderProfile()">Retry</button>
+          <button @click="loadRiderProfile()">重试</button>
         </div>
 
         <!-- Success -->
@@ -756,105 +817,103 @@
 
       <!-- 管理后台 -->
       <section v-else-if="currentPage==='admin'" class="page page-admin active">
-        <h1>Organizer Console</h1>
+        <h1>我组织的比赛</h1>
 
         <!-- Forbidden (not organizer/admin) -->
-        <div v-if="!isOrganizer && !isAdmin" class="error-state">
-          <h2>Access denied</h2>
-          <p>You need organizer or admin privileges to access this area.</p>
-          <button @click="navigate('home')">Back to Home</button>
+        <div v-if="!isOrganizer && !isAdmin" class="empty-state">
+          <h2>暂无我组织的比赛</h2>
+          <p>当前账号还不是组织者。成为组织者后，创建赛事、审核报名、推进状态和导出数据都会在这里完成。</p>
+          <button @click="navigate('dashboard')">返回我参与的比赛</button>
         </div>
 
         <!-- Unauthorized -->
         <div v-else-if="pageState.admin==='unauthorized'" class="error-state">
-          <h2>Please login</h2>
-          <button @click="navigate('login')">Login</button>
+          <h2>请先登录</h2>
+          <button @click="navigate('login')">登录</button>
         </div>
 
         <!-- Loading -->
-        <div v-else-if="pageState.admin==='loading'" class="loading-state">Loading...</div>
+        <div v-else-if="pageState.admin==='loading'" class="loading-state">加载中...</div>
 
         <!-- Error -->
         <div v-else-if="pageState.admin==='error'" class="error-state">
-          <h2>Failed to load data</h2>
+          <h2>组织者数据加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadAdminRaces()">Retry</button>
+          <button @click="loadAdminRaces()">重试</button>
         </div>
 
         <template v-else>
           <div class="admin-tabs">
-            <button :class="{active: adminTab==='races'}" @click="adminTab='races'">My Races</button>
-            <button :class="{active: adminTab==='create'}" @click="adminTab='create'">Create Race</button>
-            <button :class="{active: adminTab==='awards'}" @click="adminTab='awards'">Awards</button>
+            <button :class="{active: adminTab==='races'}" @click="adminTab='races'">我的赛事</button>
+            <button :class="{active: adminTab==='create'}" @click="adminTab='create'">创建赛事</button>
+            <button :class="{active: adminTab==='awards'}" @click="adminTab='awards'">奖项</button>
           </div>
-
           <!-- My Races -->
           <div v-if="adminTab==='races'">
-            <div v-if="adminRaces.length === 0" class="empty-state">No races managed. <button @click="adminTab='create'">Create one</button></div>
+            <div v-if="adminRaces.length === 0" class="empty-state">还没有组织赛事。<button @click="adminTab='create'">创建赛事</button></div>
             <article v-for="r in adminRaces" :key="r.id" class="glass-card admin-race-card">
-              <h3>{{ r.name }} <span :class="'status-' + r.status">{{ r.status }}</span></h3>
+              <h3>{{ r.name }} <span :class="'status-' + r.status">{{ statusLabel(r.status) }}</span></h3>
+              <p class="status-note">{{ nextRaceActionLabel(r.status) }}</p>
               <div class="race-actions">
-                <button v-if="r.status==='draft'" @click="transitionRace(r.id, 'publish')">Publish</button>
-                <button v-if="r.status==='published'" @click="transitionRace(r.id, 'open-registration')">Open Registration</button>
-                <button v-if="r.status==='registration'" @click="transitionRace(r.id, 'start')">Start</button>
-                <button v-if="r.status==='running'" @click="transitionRace(r.id, 'open-submissions')">Open Submissions</button>
-                <button v-if="r.status==='submitting'" @click="transitionRace(r.id, 'start-judging')">Start Judging</button>
-                <button v-if="r.status==='judging'" @click="transitionRace(r.id, 'complete')">Complete</button>
-                <button v-if="r.status==='completed'" @click="transitionRace(r.id, 'archive')">Archive</button>
+                <button v-if="r.status==='draft'" @click="transitionRace(r.id, 'publish')">发布赛事</button>
+                <button v-if="r.status==='published'" @click="transitionRace(r.id, 'open-registration')">开放报名</button>
+                <button v-if="r.status==='registration'" @click="transitionRace(r.id, 'start')">启动比赛</button>
+                <button v-if="r.status==='running'" @click="transitionRace(r.id, 'open-submissions')">开放作品提交</button>
+                <button v-if="r.status==='submitting'" @click="transitionRace(r.id, 'start-judging')">开始评审</button>
+                <button v-if="r.status==='judging'" @click="transitionRace(r.id, 'complete')">完成赛事</button>
+                <button v-if="r.status==='completed'" @click="transitionRace(r.id, 'archive')">归档赛事</button>
               </div>
               <div class="sub-section">
-                <h4>Registrations</h4>
-                <button @click="loadAdminRegistrations(r.id)">View</button>
+                <h4>报名审核</h4>
+                <button @click="loadAdminRegistrations(r.id)">查看</button>
                 <div v-if="adminRegistrations[r.id]">
                   <div v-for="reg in adminRegistrations[r.id]" :key="reg.id">
-                    User #{{ reg.user_id }} - {{ reg.status }}
-                    <button v-if="reg.status==='submitted'" @click="approveReg(reg.id)">Approve</button>
-                    <button v-if="reg.status==='submitted'" @click="rejectReg(reg.id)" class="danger">Reject</button>
+                    用户 #{{ reg.user_id }} - {{ statusLabel(reg.status) }}
+                    <button v-if="reg.status==='submitted'" @click="approveReg(reg.id)">通过</button>
+                    <button v-if="reg.status==='submitted'" @click="rejectReg(reg.id)" class="danger">拒绝</button>
                   </div>
                 </div>
               </div>
               <div class="sub-section">
-                <h4>Export</h4>
-                <button @click="exportCSV(r.id, 'registrations')">Registrations CSV</button>
-                <button @click="exportCSV(r.id, 'judgments')">Judgments CSV</button>
-                <button @click="exportCSV(r.id, 'works')">Works CSV</button>
+                <h4>导出</h4>
+                <button @click="exportCSV(r.id, 'registrations')">报名 CSV</button>
+                <button @click="exportCSV(r.id, 'judgments')">评审 CSV</button>
+                <button @click="exportCSV(r.id, 'works')">作品 CSV</button>
               </div>
             </article>
           </div>
-
           <!-- Create Race -->
           <div v-if="adminTab==='create'">
             <form @submit.prevent="createRace" class="admin-form">
-              <label>Name <input v-model="createRaceForm.name" required /></label>
-              <label>Description <textarea v-model="createRaceForm.description"></textarea></label>
-              <label>Theme <input v-model="createRaceForm.theme" /></label>
-              <label>Rules <textarea v-model="createRaceForm.rules"></textarea></label>
-              <label>Judging Mode
+              <label>名称 <input v-model="createRaceForm.name" required /></label>
+              <label>说明 <textarea v-model="createRaceForm.description"></textarea></label>
+              <label>主题 <input v-model="createRaceForm.theme" /></label>
+              <label>规则 <textarea v-model="createRaceForm.rules"></textarea></label>
+              <label>评审模式
                 <select v-model="createRaceForm.judging_mode">
-                  <option value="blind">Blind</option>
-                  <option value="open">Open</option>
+                  <option value="blind">盲审</option>
+                  <option value="open">公开评审</option>
                 </select>
               </label>
-              <button type="submit">Create Race</button>
+              <button type="submit">创建赛事</button>
             </form>
           </div>
-
           <!-- Awards -->
           <div v-if="adminTab==='awards'">
             <select v-model="awardRaceId" @change="loadAwards">
-              <option value="">Select Race</option>
+              <option value="">选择赛事</option>
               <option v-for="r in adminRaces" :key="r.id" :value="r.id">{{ r.name }}</option>
             </select>
             <div v-if="awardRaceId">
-              <h3>Create Award</h3>
+              <h3>创建奖项</h3>
               <form @submit.prevent="createAward" class="admin-form">
-                <label>Title <input v-model="awardForm.title" required /></label>
-                <label>Position <input v-model.number="awardForm.position" type="number" min="1" required /></label>
-                <label>Work ID <input v-model.number="awardForm.work_id" type="number" /></label>
-                <label>Description <input v-model="awardForm.description" /></label>
-                <button type="submit">Create Award</button>
+                <label>名称 <input v-model="awardForm.title" required /></label>
+                <label>名次 <input v-model.number="awardForm.position" type="number" min="1" required /></label>
+                <label>作品 ID <input v-model.number="awardForm.work_id" type="number" /></label>
+                <label>说明 <input v-model="awardForm.description" /></label>
+                <button type="submit">创建奖项</button>
               </form>
-              <h3>Existing Awards</h3>
+              <h3>已有奖项</h3>
               <div v-for="a in awards" :key="a.id" class="glass-card">
                 <b>#{{ a.position }} {{ a.title }}</b>
                 <p>{{ a.description }}</p>

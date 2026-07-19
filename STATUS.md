@@ -10,6 +10,7 @@
 * 人员 C 已完成评审系统 + 奖项榜单 + CSV 导出 + Review Readiness + RiderProfile。30 项 C 专项测试通过。
 * 人员 D 已完成 CA 全链路 + Live Hall + GitHub OAuth + 旧系统收尾。28 项 D 专项测试通过。
 * 人员 E 已完成集成：OpenAPI + 前端 + CI/CD + Docker + e2e。CI/CD pipeline 已配置，`docker-compose up` 一键启动。
+* 前端 UX 审计问题已修复：导航双 Tab 常显、Dashboard RaceProject 参数修正、参与/组织流程入口中文化、评委邀请接受后跳转评审清单。
 * 全量测试：183 passed, 0 failed ✅
 * 旧任务体系（角色 1-5、`docs/ary.plan.md`）已归档至 `docs/archive/`。
 * 当前正式任务定义入口是根目录 `team-division.md`。
@@ -30,7 +31,7 @@
 | CA 全链路（双模式/向导/Ingestion） | 人员 D | ✅ 已交付 | 22 测试通过；`ca_bp` 蓝图 + `ca_connections`/`ca_sessions` 表 + LiveHall/Timeline；`test_ca_connection.py` + `test_ca_ingestion.py` |
 | Live Hall + Evidence Timeline | 人员 D | ✅ 已交付 | 4 测试通过；`public_bp` + `rider_bp` + `organizer_bp` 扩展；`test_public_apis.py` |
 | GitHub OAuth + 旧系统收尾 | 人员 D | ✅ 已交付 | 2 测试通过；`auth.py` OAuth 端点 + 5 个 `DEPRECATED.md`；`test_github_oauth.py` |
-| OpenAPI 契约 + 前端 | 人员 E | ✅ 已交付 | `docs/openapi.yaml` 53.88 KB, 17 页 SPA |
+| OpenAPI 契约 + 前端 | 人员 E | ✅ 已交付 | `docs/openapi.yaml` 53.88 KB, 17 页 SPA；`frontend/ux-audit.test.js` |
 | CI/CD + Docker + e2e + 上线 | 人员 E | ✅ 已交付 | `.github/workflows/ci.yml`, `docker-compose up` 一键启动 |
 
 ## 证据索引

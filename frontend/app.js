@@ -143,6 +143,7 @@ const app = createApp({
 
     // Dashboard
     const myRaceProjects = ref([]);
+    const judgeInvitations = ref([]);
 
     // RaceProject
     const currentRaceProjectId = ref(null);
@@ -257,6 +258,53 @@ const app = createApp({
       pageState[page] = isEmpty ? 'empty' : 'success';
     }
 
+    function responseData(res) {
+      return res?.data !== undefined ? res.data : res;
+    }
+
+    function responseItems(res) {
+      const data = responseData(res);
+      if (Array.isArray(res?.items)) return res.items;
+      if (Array.isArray(data?.items)) return data.items;
+      if (Array.isArray(data)) return data;
+      return [];
+    }
+
+    function statusLabel(status) {
+      const labels = {
+        draft: '草稿',
+        published: '已发布',
+        registration: '报名中',
+        submitted: '已提交',
+        approved: '已通过',
+        rejected: '已拒绝',
+        running: '进行中',
+        submitting: '作品提交',
+        judging: '评审中',
+        completed: '已完成',
+        archived: '已归档',
+      };
+      return labels[status] || status || '未知';
+    }
+
+    function nextRaceActionLabel(status) {
+      const labels = {
+        draft: '下一步：发布赛事，让参赛者能看到赛事详情。',
+        published: '下一步：开放报名，开始收集参赛申请。',
+        registration: '下一步：审核报名，通过后可启动比赛。',
+        running: '下一步：开放作品提交，让骑手提交参赛作品。',
+        submitting: '下一步：开始评审，锁定作品并通知评委。',
+        judging: '下一步：完成评审并发布最终结果。',
+        completed: '下一步：归档赛事，锁定历史结果。',
+        archived: '赛事已归档，状态不可再推进。',
+      };
+      return labels[status] || '暂无可执行的状态动作。';
+    }
+
+    function getRaceProjectIdFromRegistration(reg) {
+      return reg?.race_project_id || reg?.raceProjectId || reg?.race_project?.id || reg?.raceProject?.id || null;
+    }
+
     // ---- Navigation ----
     function navigate(page, param) {
       currentPage.value = page;
@@ -278,6 +326,7 @@ const app = createApp({
         case 'work': loadWorkDetail(); break;
         case 'judge': loadJudgeAssignments(); break;
         case 'leaderboard': loadRaces(); break;
+        case 'riders': resetPageState('riders'); break;
         case 'admin': loadAdminRaces(); break;
         case 'live': liveRaceId.value = pageParams.id || ''; loadLiveData(); break;
         case 'register-auth': registerAuthError.value = ''; registerAuthSuccess.value = ''; break;
@@ -459,7 +508,8 @@ const app = createApp({
       setLoading('leaderboard');
       try {
         const res = await api(`/api/v1/public/races/${leaderboardRaceId.value}/leaderboard`);
-        leaderboard.value = res.data || res || [];
+        const data = responseData(res);
+        leaderboard.value = data?.rankings || data?.items || (Array.isArray(data) ? data : []);
         setSuccess('leaderboard', leaderboard.value);
       } catch (e) {
         leaderboard.value = [];
@@ -480,6 +530,13 @@ const app = createApp({
         riderProfile.value = null;
         handlePageError('riders', e);
       } finally { loading.rider = false; }
+    }
+
+    function openRiderProfile(userId) {
+      if (!userId) return;
+      riderIdLookup.value = String(userId);
+      currentPage.value = 'riders';
+      loadRiderProfile();
     }
 
     // ---- API: Profile ----
@@ -544,7 +601,7 @@ const app = createApp({
       setLoading('registrations');
       try {
         const res = await api('/api/v1/rider/registrations');
-        myRegistrations.value = res.items || res.data?.items || res.data || [];
+        myRegistrations.value = responseItems(res);
         setSuccess('registrations', myRegistrations.value);
       } catch (e) {
         myRegistrations.value = [];
@@ -553,25 +610,90 @@ const app = createApp({
     }
 
     // ---- API: Dashboard / RaceProject ----
+    async function loadRaceProjectForRegistration(reg) {
+      let fullReg = reg;
+      if (!getRaceProjectIdFromRegistration(fullReg)) {
+        try {
+          const detailRes = await api(`/api/v1/rider/registrations/${reg.id}`);
+          fullReg = responseData(detailRes);
+        } catch (_) { /* Detail endpoint may be unavailable for older data. */ }
+      }
+
+      const embeddedProject = fullReg?.race_project || fullReg?.raceProject;
+      const raceProjectId = getRaceProjectIdFromRegistration(fullReg);
+      if (!raceProjectId && !embeddedProject?.id) return null;
+
+      try {
+        const rpRes = await api(`/api/v1/rider/race-projects/${raceProjectId || embeddedProject.id}`);
+        return { ...responseData(rpRes), registration: fullReg };
+      } catch (_) {
+        return embeddedProject?.id ? { ...embeddedProject, registration: fullReg } : null;
+      }
+    }
+
+    async function loadDashboardJudgeAssignments() {
+      try {
+        const res = await api('/api/v1/judge/assignments');
+        judgeAssignments.value = responseItems(res);
+      } catch (_) {
+        judgeAssignments.value = [];
+      }
+    }
+
+    async function loadJudgeInvitations() {
+      try {
+        const res = await api('/api/v1/judge-invitations');
+        judgeInvitations.value = responseItems(res);
+      } catch (_) {
+        judgeInvitations.value = [];
+      }
+    }
+
+    async function acceptJudgeInvitation(invitationId) {
+      try {
+        await api(`/api/v1/judge-invitations/${invitationId}/accept`, { method: 'POST' });
+        await checkAuth();
+        await loadDashboard();
+        navigate('judge');
+      } catch (e) { alert('接受邀请失败：' + e.message); }
+    }
+
+    async function rejectJudgeInvitation(invitationId) {
+      try {
+        await api(`/api/v1/judge-invitations/${invitationId}/reject`, { method: 'POST' });
+        await loadDashboard();
+      } catch (e) { alert('拒绝邀请失败：' + e.message); }
+    }
+
     async function loadDashboard() {
+      if (!isLoggedIn.value) { pageState.dashboard = 'unauthorized'; return; }
       loading.dashboard = true;
       resetPageState('dashboard');
       setLoading('dashboard');
       try {
-        const res = await api('/api/v1/rider/registrations');
-        const regs = res.items || res.data?.items || res.data || [];
+        let regs = [];
+        try {
+          const res = await api('/api/v1/rider/registrations');
+          regs = responseItems(res);
+        } catch (_) {
+          regs = [];
+        }
+        myRegistrations.value = regs;
         const approved = regs.filter(r => r.status === 'approved');
         const projects = [];
         for (const reg of approved) {
-          try {
-            const rpRes = await api(`/api/v1/rider/race-projects/${reg.id}`);
-            projects.push(rpRes.data || rpRes);
-          } catch (_) { /* RaceProject might not exist yet */ }
+          const project = await loadRaceProjectForRegistration(reg);
+          if (project) projects.push(project);
         }
+        await Promise.all([loadJudgeInvitations(), loadDashboardJudgeAssignments()]);
         myRaceProjects.value = projects;
-        setSuccess('dashboard', projects);
+        const hasDashboardItems = regs.length || projects.length || judgeInvitations.value.length || judgeAssignments.value.length;
+        pageState.dashboard = hasDashboardItems ? 'success' : 'empty';
       } catch (e) {
+        myRegistrations.value = [];
         myRaceProjects.value = [];
+        judgeInvitations.value = [];
+        judgeAssignments.value = [];
         handlePageError('dashboard', e);
       } finally { loading.dashboard = false; }
     }
@@ -644,7 +766,7 @@ const app = createApp({
       setLoading('judge');
       try {
         const res = await api('/api/v1/judge/assignments');
-        judgeAssignments.value = res.data || res || [];
+        judgeAssignments.value = responseItems(res);
         judgeAssignments.value.forEach(a => {
           if (!judgmentForms[a.work_id]) {
             judgmentForms[a.work_id] = {
@@ -796,12 +918,18 @@ const app = createApp({
 
     // ---- API: Admin/Organizer ----
     async function loadAdminRaces() {
+      if (!isLoggedIn.value) { pageState.admin = 'unauthorized'; return; }
+      if (!isOrganizer.value && !isAdmin.value) {
+        adminRaces.value = [];
+        pageState.admin = 'empty';
+        return;
+      }
       loading.adminRaces = true;
       resetPageState('admin');
       setLoading('admin');
       try {
         const res = await api('/api/v1/organizer/races');
-        adminRaces.value = res.items || res.data?.items || res.data || [];
+        adminRaces.value = responseItems(res);
         setSuccess('admin', adminRaces.value);
       } catch (e) {
         adminRaces.value = [];
@@ -819,7 +947,7 @@ const app = createApp({
     async function loadAdminRegistrations(raceId) {
       try {
         const res = await api(`/api/v1/organizer/races/${raceId}/registrations`);
-        adminRegistrations[raceId] = res.items || res.data?.items || res.data || [];
+        adminRegistrations[raceId] = responseItems(res);
       } catch (_) { adminRegistrations[raceId] = []; }
     }
 
@@ -933,7 +1061,8 @@ const app = createApp({
       registerRaceId, registerError, registerSuccess, registerForRace, doRegister,
       myRegistrations, loadMyRegistrations,
       // Dashboard
-      myRaceProjects, loadDashboard,
+      myRaceProjects, judgeInvitations, loadDashboard,
+      acceptJudgeInvitation, rejectJudgeInvitation,
       // RaceProject
       currentRaceProjectId, raceProject, raceProjectWorks,
       showCreateWork, workForm, createWork, submitWork, deleteWork,
@@ -946,7 +1075,7 @@ const app = createApp({
       // Leaderboard
       leaderboard, leaderboardRaceId, loadLeaderboard,
       // Rider
-      riderIdLookup, riderProfile, loadRiderProfile,
+      riderIdLookup, riderProfile, loadRiderProfile, openRiderProfile,
       // Live
       liveRaceId, liveRaceData, liveEntries, loadLiveData, riskClass, caBarPercent,
       // CA Wizard
@@ -966,7 +1095,7 @@ const app = createApp({
       errorTitle, errorMessage,
       pageState, isOffline, resetPageState,
       // Utils
-      escapeHtml, safeUrl, sanitizeInput,
+      escapeHtml, safeUrl, sanitizeInput, statusLabel, nextRaceActionLabel,
     };
   },
 });
