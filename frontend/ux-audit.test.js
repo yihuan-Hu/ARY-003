@@ -3,6 +3,10 @@ const assert = require('assert');
 
 const app = fs.readFileSync('frontend/app.js', 'utf8');
 const html = fs.readFileSync('frontend/index.html', 'utf8');
+const apiJs = fs.existsSync('frontend/js/api.js') ? fs.readFileSync('frontend/js/api.js', 'utf8') : '';
+const constantsJs = fs.existsSync('frontend/js/constants.js') ? fs.readFileSync('frontend/js/constants.js', 'utf8') : '';
+const uxJs = fs.existsSync('frontend/js/ux.js') ? fs.readFileSync('frontend/js/ux.js', 'utf8') : '';
+const finalReview = fs.existsSync('docs/final-review.md') ? fs.readFileSync('docs/final-review.md', 'utf8') : '';
 const visibleText = html
   .replace(/<!--[\s\S]*?-->/g, ' ')
   .replace(/{{[\s\S]*?}}/g, ' ')
@@ -127,6 +131,20 @@ assert(app.includes('loadRaceProjectForRegistration'), 'Dashboard must resolve R
 assert(app.includes('acceptJudgeInvitation'), 'Accept judge invitation must be wired');
 assert(html.includes('已登录'), 'Register page must detect logged-in state');
 
-console.log(`UX audit passed — ${MUST_NOT_HAVE.length + 12} checks OK`);
+// ============================================================
+// 5. 90+ 工程化提分检查
+// ============================================================
+assert(apiJs.includes('window.ARYApi'), 'API request layer must be extracted to frontend/js/api.js');
+assert(constantsJs.includes('window.ARYConstants'), 'Status/action labels must be extracted to frontend/js/constants.js');
+assert(uxJs.includes('window.ARYUx'), 'Shared UX/data helpers must be extracted to frontend/js/ux.js');
+assert(html.includes('frontend/js/api.js') || html.includes('js/api.js'), 'index.html must load extracted API script');
+assert(html.includes('frontend/js/constants.js') || html.includes('js/constants.js'), 'index.html must load extracted constants script');
+assert(html.includes('frontend/js/ux.js') || html.includes('js/ux.js'), 'index.html must load extracted UX helper script');
+assert(!html.includes("window.ARY_API_BASE = 'http://localhost:5000'"), 'Frontend must not hard-code localhost API base for production');
+assert(!app.includes('function api(path'), 'app.js must not own the low-level API client');
+assert(!app.includes('function statusLabel(status)'), 'app.js must not own status label constants');
+assert(finalReview.includes('系统架构') && finalReview.includes('测试证据') && finalReview.includes('创新点'), 'Final review document must summarize architecture, tests, and innovation');
+
+console.log(`UX audit passed — ${MUST_NOT_HAVE.length + 22} checks OK`);
 console.log(`English violations to review (may be false positives): ${violations.length}`);
 if (violations.length) violations.slice(0, 15).forEach(v => console.log('  ', v));

@@ -6,8 +6,11 @@
   <!-- CSP handled by nginx in production -->
   <meta http-equiv="X-Content-Type-Options" content="nosniff" />
   <title>ARY - Agent Racing Yard</title>
-  <script>window.ARY_API_BASE = 'http://localhost:5000';</script>
+  <script>window.ARY_API_BASE = window.ARY_API_BASE || '';</script>
   <script src="vue.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/constants.js"></script>
+  <script src="js/ux.js"></script>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>

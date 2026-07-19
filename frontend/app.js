@@ -8,79 +8,9 @@ window.onerror = function(msg, url, line, col, err) {
   return true;
 };
 
-const API_BASE = window.ARY_API_BASE || '';
-
-let _csrfToken = null;
-
-function api(path, options = {}) {
-  const token = localStorage.getItem('ary_token');
-  const headers = { 'Content-Type': 'application/json', ...options.headers };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const method = (options.method || 'GET').toUpperCase();
-  if (method !== 'GET' && _csrfToken) {
-    headers['X-CSRF-Token'] = _csrfToken;
-  }
-  return fetch(`${API_BASE}${path}`, { ...options, headers, credentials: 'include' })
-    .then(async (r) => {
-      // 从 GET 响应中提取 CSRF token
-      if (method === 'GET') {
-        const csrfFromHeader = r.headers.get('X-CSRF-Token');
-        if (csrfFromHeader) _csrfToken = csrfFromHeader;
-      }
-      const ct = r.headers.get('content-type') || '';
-      const isJson = ct.includes('application/json');
-      const data = isJson ? await r.json().catch(() => null) : null;
-      if (!r.ok || !isJson) {
-        const msg =
-          data?.error?.message ||
-          data?.message ||
-          data?.error ||
-          (!isJson ? `Unexpected response (status ${r.status})` : `HTTP ${r.status}`);
-        const err = new Error(msg);
-        err.status = r.status;
-        err.data = data;
-        throw err;
-      }
-      return data;
-    });
-}
-
-// =============================================
-// XSS 防护工具函数
-// =============================================
-// HTML 转义防 XSS
-function escapeHtml(str) {
-  if (!str) return '';
-  if (typeof str !== 'string') str = String(str);
-  const div = document.createElement('div');
-  div.textContent = str;
-  return div.innerHTML;
-}
-
-// 安全 URL 校验 — 只允许 http/https 协议，防止 javascript: 注入
-function safeUrl(url) {
-  if (!url) return '#';
-  const trimmed = String(url).trim();
-  const lower = trimmed.toLowerCase();
-  if (lower.startsWith('javascript:') || lower.startsWith('data:') || lower.startsWith('vbscript:')) {
-    return '#';
-  }
-  if (lower.startsWith('http://') || lower.startsWith('https://') || lower.startsWith('/') || lower.startsWith('#')) {
-    return trimmed;
-  }
-  return '#'; // 拒绝相对路径和未知协议
-}
-
-// 输入净化 — 去除控制字符，限制长度
-function sanitizeInput(str, maxLen = 5000) {
-  if (!str) return '';
-  if (typeof str !== 'string') str = String(str);
-  // 移除 null 字节和控制字符（保留换行和制表符用于 textarea）
-  let cleaned = str.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
-  // 限制长度
-  if (cleaned.length > maxLen) cleaned = cleaned.substring(0, maxLen);
-  return cleaned.trim();
-}
+const { API_BASE, api } = window.ARYApi;
+const { statusLabel, nextRaceActionLabel } = window.ARYConstants;
+const { responseData, responseItems, escapeHtml, safeUrl, sanitizeInput } = window.ARYUx;
 
 const { createApp, ref, reactive, computed, onMounted, watch } = Vue;
 
@@ -256,49 +186,6 @@ const app = createApp({
     function setSuccess(page, data) {
       const isEmpty = !data || (Array.isArray(data) && data.length === 0);
       pageState[page] = isEmpty ? 'empty' : 'success';
-    }
-
-    function responseData(res) {
-      return res?.data !== undefined ? res.data : res;
-    }
-
-    function responseItems(res) {
-      const data = responseData(res);
-      if (Array.isArray(res?.items)) return res.items;
-      if (Array.isArray(data?.items)) return data.items;
-      if (Array.isArray(data)) return data;
-      return [];
-    }
-
-    function statusLabel(status) {
-      const labels = {
-        draft: '草稿',
-        published: '已发布',
-        registration: '报名中',
-        submitted: '已提交',
-        approved: '已通过',
-        rejected: '已拒绝',
-        running: '进行中',
-        submitting: '作品提交',
-        judging: '评审中',
-        completed: '已完成',
-        archived: '已归档',
-      };
-      return labels[status] || status || '未知';
-    }
-
-    function nextRaceActionLabel(status) {
-      const labels = {
-        draft: '下一步：发布赛事，让参赛者能看到赛事详情。',
-        published: '下一步：开放报名，开始收集参赛申请。',
-        registration: '下一步：审核报名，通过后可启动比赛。',
-        running: '下一步：开放作品提交，让骑手提交参赛作品。',
-        submitting: '下一步：开始评审，锁定作品并通知评委。',
-        judging: '下一步：完成评审并发布最终结果。',
-        completed: '下一步：归档赛事，锁定历史结果。',
-        archived: '赛事已归档，状态不可再推进。',
-      };
-      return labels[status] || '暂无可执行的状态动作。';
     }
 
     function getRaceProjectIdFromRegistration(reg) {
