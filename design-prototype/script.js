@@ -175,6 +175,7 @@ function restartHomeRaceCarousel() {
 // ---- Works 筛选（全局作用域，供点击事件调用） ----
 
 var allWorksFilter = [];
+var featuredWorkIds = ["work-gba-wander"];
 
 function renderWorkCards(works) {
   html(
@@ -185,8 +186,9 @@ function renderWorkCards(works) {
         var badge = "作品";
         if (work.awardIds && work.awardIds.length) badge = "已获奖";
         else if (race && race.status === "judging") badge = "评审中";
-        else if (work.status === "submitted" || work.status === "published") badge = "精选";
+        else if (featuredWorkIds.indexOf(work.id) >= 0) badge = "精选";
         var workStatusText = { draft: "草稿", submitted: "已提交", published: "已发布", locked: "已锁定" }[work.status] || work.status;
+        var heroClass = badge === "精选" ? " hero-work" : "";
         return '<article class="work-card' + heroClass + '"><span>' + badge + '</span><h2>' + escapeHtml(work.title) + '</h2><p>' + escapeHtml(work.summary) + '</p><b>' + escapeHtml(race ? race.title : "") + ' / ' + workStatusText + '</b><button type="button">查看详情</button></article>';
       })
       .join(""),
@@ -197,14 +199,8 @@ function renderWorksFiltered(filterText) {
   filterText = (filterText || "").replace(/\s/g, "");
   var filtered;
   if (filterText.indexOf("精选") >= 0) {
-    // 精选 = badge 为"精选"的卡片（submitted/published，非已获奖，非评审中）
-    filtered = allWorksFilter.filter(function (w) {
-      var race = getRace(w.raceId);
-      var isAwarded = w.awardIds && w.awardIds.length > 0;
-      var isJudging = race && race.status === "judging";
-      var isSubmittedOrPublished = w.status === "submitted" || w.status === "published";
-      return isSubmittedOrPublished && !isAwarded && !isJudging;
-    });
+    // 精选 = featuredWorkIds 中的卡片
+    filtered = allWorksFilter.filter(function (w) { return featuredWorkIds.indexOf(w.id) >= 0; });
   } else if (filterText.indexOf("已获奖") >= 0) {
     filtered = allWorksFilter.filter(function (w) { return w.awardIds && w.awardIds.length > 0; });
   } else if (filterText.indexOf("评审") >= 0) {
