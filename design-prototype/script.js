@@ -197,8 +197,14 @@ function renderWorksFiltered(filterText) {
   filterText = (filterText || "").replace(/\s/g, "");
   var filtered;
   if (filterText.indexOf("精选") >= 0) {
-    // 精选 = 只显示首页 hero 作品
-    filtered = allWorksFilter.filter(function (w) { return w.id === "work-gba-wander"; });
+    // 精选 = badge 为"精选"的卡片（submitted/published，非已获奖，非评审中）
+    filtered = allWorksFilter.filter(function (w) {
+      var race = getRace(w.raceId);
+      var isAwarded = w.awardIds && w.awardIds.length > 0;
+      var isJudging = race && race.status === "judging";
+      var isSubmittedOrPublished = w.status === "submitted" || w.status === "published";
+      return isSubmittedOrPublished && !isAwarded && !isJudging;
+    });
   } else if (filterText.indexOf("已获奖") >= 0) {
     filtered = allWorksFilter.filter(function (w) { return w.awardIds && w.awardIds.length > 0; });
   } else if (filterText.indexOf("评审") >= 0) {
