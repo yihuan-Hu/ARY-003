@@ -423,6 +423,13 @@ document.addEventListener("click", (event) => {
     return;
   }
 
+  const worksFilter = event.target.closest(".works-toolbar button");
+  if (worksFilter) {
+    document.querySelectorAll(".works-toolbar button").forEach(function (btn) { btn.classList.remove("active"); });
+    worksFilter.classList.add("active");
+    return;
+  }
+
   const button = event.target.closest("[data-page]");
   if (!button) return;
   setPage(button.dataset.page);
