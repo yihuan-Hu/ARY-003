@@ -11,6 +11,7 @@
 * 人员 D 已完成 CA 全链路 + Live Hall + GitHub OAuth + 旧系统收尾。28 项 D 专项测试通过。
 * 人员 E 已完成集成：OpenAPI + 前端 + CI/CD + Docker + e2e。CI/CD pipeline 已配置，`docker-compose up` 一键启动。
 * 前端 UX 审计问题已修复：导航双 Tab 常显、Dashboard RaceProject 参数修正、参与/组织流程入口中文化、评委邀请接受后跳转评审清单。
+* 前端上线前轻抛光已完成：用户可见文案统一中文化，参与/组织/评审三个工作区改为任务面板表达。
 * 全量测试：183 passed, 0 failed ✅
 * 旧任务体系（角色 1-5、`docs/ary.plan.md`）已归档至 `docs/archive/`。
 * 当前正式任务定义入口是根目录 `team-division.md`。

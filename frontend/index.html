@@ -47,23 +47,23 @@
         <div class="speed-bg"></div>
 
         <!-- 离线状态 -->
-        <div v-if="isOffline" class="page-banner offline-banner">&#9888; You are offline. Some features may be unavailable.</div>
+        <div v-if="isOffline" class="page-banner offline-banner">&#9888; 当前离线，部分功能可能不可用。</div>
 
         <!-- Loading 状态 -->
-        <div v-if="pageState.home==='loading'" class="loading-state">Loading races...</div>
+        <div v-if="pageState.home==='loading'" class="loading-state">赛事加载中...</div>
 
         <!-- Error 状态 -->
         <div v-else-if="pageState.home==='error'" class="error-state">
-          <h2>Failed to load races</h2>
+          <h2>赛事加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadRaces()">Retry</button>
+          <button @click="loadRaces()">重试</button>
         </div>
 
         <!-- Empty 状态 -->
         <div v-else-if="pageState.home==='empty'" class="empty-state">
-          <h2>No races available</h2>
-          <p>Check back later for upcoming events.</p>
-          <button @click="loadRaces()">Refresh</button>
+          <h2>暂无可浏览赛事</h2>
+          <p>稍后回来查看新的赛事安排。</p>
+          <button @click="loadRaces()">刷新</button>
         </div>
 
         <!-- Success 状态 -->
@@ -72,31 +72,31 @@
             <h1>{{ featuredRace?.name || 'Agent Racing Yard' }}</h1>
             <p class="hero-subtitle">{{ featuredRace?.description || '智能体骑行赛事平台' }}</p>
             <div class="hero-meta">
-              <span><b>{{ stats?.total_races || 0 }}</b> races</span>
-              <span><b>{{ stats?.active_races || 0 }}</b> active</span>
-              <span><b>{{ stats?.total_riders || 0 }}</b> riders</span>
-              <span><b>{{ stats?.total_works || 0 }}</b> works</span>
+              <span><b>{{ stats?.total_races || 0 }}</b> 赛事</span>
+              <span><b>{{ stats?.active_races || 0 }}</b> 进行中</span>
+              <span><b>{{ stats?.total_riders || 0 }}</b> 骑手</span>
+              <span><b>{{ stats?.total_works || 0 }}</b> 作品</span>
             </div>
             <div class="hero-actions">
-              <button @click="navigate('race', featuredRace?.id)" v-if="featuredRace">View Race</button>
-              <button @click="navigate('live', featuredRace?.id)" v-if="featuredRace">Live Hall</button>
+              <button @click="navigate('race', featuredRace?.id)" v-if="featuredRace">查看赛事</button>
+              <button @click="navigate('live', featuredRace?.id)" v-if="featuredRace">直播大厅</button>
             </div>
           </section>
           <section class="race-list">
             <div class="filter-bar">
-              <input v-model="raceFilter.search" placeholder="Search races..." @input="loadRaces" />
+              <input v-model="raceFilter.search" placeholder="搜索赛事..." @input="loadRaces" />
               <select v-model="raceFilter.status" @change="loadRaces">
-                <option value="">All Status</option>
-                <option value="registration">Registration</option>
-                <option value="running">Running</option>
-                <option value="submitting">Submitting</option>
-                <option value="judging">Judging</option>
-                <option value="completed">Completed</option>
+                <option value="">全部状态</option>
+                <option value="registration">报名中</option>
+                <option value="running">进行中</option>
+                <option value="submitting">作品提交</option>
+                <option value="judging">评审中</option>
+                <option value="completed">已完成</option>
               </select>
             </div>
             <div class="race-grid">
               <article v-for="race in races" :key="race.id" class="race-card glass-card" @click="navigate('race', race.id)">
-                <div class="card-head"><span :class="'status-'+race.status">{{ race.status }}</span></div>
+                <div class="card-head"><span :class="'status-'+race.status">{{ statusLabel(race.status) }}</span></div>
                 <h3>{{ race.name }}</h3>
                 <p>{{ race.description?.substring(0, 120) }}{{ race.description?.length > 120 ? '...' : '' }}</p>
               </article>
@@ -108,27 +108,27 @@
       <!-- 赛事详情 -->
       <section v-else-if="currentPage==='race'" class="page page-race active">
         <!-- Loading -->
-        <div v-if="pageState.race==='loading'" class="loading-state">Loading race details...</div>
+        <div v-if="pageState.race==='loading'" class="loading-state">赛事详情加载中...</div>
 
         <!-- Not Found -->
         <div v-else-if="pageState.race==='not-found'" class="error-state">
-          <h2>Race not found</h2>
+          <h2>赛事不存在</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="navigate('home')">Back to Home</button>
+          <button @click="navigate('home')">返回赛事</button>
         </div>
 
         <!-- Error -->
         <div v-else-if="pageState.race==='error'" class="error-state">
-          <h2>Failed to load race</h2>
+          <h2>赛事加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="navigate('home')">Back to Home</button>
+          <button @click="navigate('home')">返回赛事</button>
         </div>
 
         <!-- Success -->
         <template v-else-if="currentRace">
-          <div class="page-label"><span>Race</span></div>
+          <div class="page-label"><span>赛事</span></div>
           <section class="race-hero-panel">
-            <p class="section-kicker">{{ currentRace.name }} / {{ currentRace.status }}</p>
+            <p class="section-kicker">{{ currentRace.name }} / {{ statusLabel(currentRace.status) }}</p>
             <h1>{{ currentRace.name }}</h1>
             <p class="race-summary">{{ currentRace.description }}</p>
             <div class="race-cta-row">
@@ -139,9 +139,9 @@
             </div>
           </section>
           <section class="race-state-grid">
-            <article class="state-card"><span>Participants</span><b>{{ currentRace.participant_count || 0 }}</b></article>
-            <article class="state-card"><span>Works</span><b>{{ currentRace.public_work_count || 0 }}</b></article>
-            <article class="state-card"><span>Mode</span><b>{{ currentRace.judging_mode || 'blind' }}</b></article>
+            <article class="state-card"><span>参赛人数</span><b>{{ currentRace.participant_count || 0 }}</b></article>
+            <article class="state-card"><span>公开作品</span><b>{{ currentRace.public_work_count || 0 }}</b></article>
+            <article class="state-card"><span>评审模式</span><b>{{ currentRace.judging_mode === 'open' ? '公开评审' : '盲审' }}</b></article>
           </section>
         </template>
       </section>
@@ -198,24 +198,24 @@
       <section v-else-if="currentPage==='profile'" class="page page-profile active">
         <!-- Unauthorized -->
         <div v-if="pageState.profile==='unauthorized'" class="error-state">
-          <h2>Please login first</h2>
-          <p>You need to be logged in to view your profile.</p>
-          <button @click="navigate('login')">Go to Login</button>
+          <h2>请先登录</h2>
+          <p>登录后可以查看和编辑个人资料。</p>
+          <button @click="navigate('login')">去登录</button>
         </div>
 
         <!-- Loading -->
-        <div v-else-if="pageState.profile==='loading'" class="loading-state">Loading profile...</div>
+        <div v-else-if="pageState.profile==='loading'" class="loading-state">个人资料加载中...</div>
 
         <!-- Error -->
         <div v-else-if="pageState.profile==='error'" class="error-state">
-          <h2>Failed to load profile</h2>
+          <h2>个人资料加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadProfile()">Retry</button>
+          <button @click="loadProfile()">重试</button>
         </div>
 
         <!-- Success -->
         <template v-else-if="profile">
-          <h1>Profile</h1>
+          <h1>个人资料</h1>
           <div class="profile-layout">
             <aside class="profile-card">
               <div class="avatar-mark">{{ (profile.display_name || profile.username || '?')[0]?.toUpperCase() }}</div>
@@ -224,10 +224,10 @@
               <p>{{ profile.bio || '' }}</p>
             </aside>
             <form @submit.prevent="updateProfile" class="profile-form">
-              <label>Display Name <input v-model="profileForm.display_name" /></label>
-              <label>School/Org <input v-model="profileForm.school_org" /></label>
-              <label>Bio <textarea v-model="profileForm.bio" rows="3"></textarea></label>
-              <button type="submit">Save</button>
+              <label>展示名称 <input v-model="profileForm.display_name" /></label>
+              <label>学校/组织 <input v-model="profileForm.school_org" /></label>
+              <label>简介 <textarea v-model="profileForm.bio" rows="3"></textarea></label>
+              <button type="submit">保存</button>
             </form>
           </div>
         </template>
@@ -235,31 +235,31 @@
 
       <!-- 赛事报名 -->
       <section v-else-if="currentPage==='register'" class="page page-register active">
-        <h1>Race Registration</h1>
+        <h1>赛事报名</h1>
 
         <!-- Empty (no race selected) -->
-        <div v-if="!registerRaceId" class="error-state">No race selected — please go back and select a race.</div>
+        <div v-if="!registerRaceId" class="error-state">尚未选择赛事，请返回赛事列表后重新报名。</div>
 
         <!-- Error -->
         <div v-else-if="pageState.register==='error' || pageState.register==='unauthorized' || pageState.register==='forbidden'" class="error-state">
-          <h2>{{ pageState.register==='unauthorized' ? 'Please login' : pageState.register==='forbidden' ? 'Access denied' : 'Registration failed' }}</h2>
+          <h2>{{ pageState.register==='unauthorized' ? '请先登录' : pageState.register==='forbidden' ? '无权报名' : '报名失败' }}</h2>
           <p>{{ registerError || errorMessage }}</p>
-          <button v-if="pageState.register==='unauthorized'" @click="navigate('login')">Login</button>
-          <button v-else @click="navigate('race', registerRaceId)">Back to Race</button>
+          <button v-if="pageState.register==='unauthorized'" @click="navigate('login')">登录</button>
+          <button v-else @click="navigate('race', registerRaceId)">返回赛事</button>
         </div>
 
         <!-- Success -->
         <div v-else-if="registerSuccess" class="success-message">
-          <h2>Registration submitted!</h2>
-          <p>Your registration has been submitted for review.</p>
-          <button @click="navigate('registrations')">View My Registrations</button>
+          <h2>报名已提交</h2>
+          <p>你的报名已提交审核。</p>
+          <button @click="navigate('registrations')">查看报名记录</button>
         </div>
 
         <!-- Form -->
         <template v-else>
-          <p>Registering for Race #{{ registerRaceId }}</p>
+          <p>正在报名赛事 #{{ registerRaceId }}</p>
           <div v-if="registerError" class="error-message">{{ registerError }}</div>
-          <button @click="doRegister" :disabled="loading.register">{{ loading.register ? 'Submitting...' : 'Confirm Registration' }}</button>
+          <button @click="doRegister" :disabled="loading.register">{{ loading.register ? '提交中...' : '确认报名' }}</button>
         </template>
       </section>
 
@@ -291,7 +291,7 @@
         <div v-else class="reg-list">
           <article v-for="reg in myRegistrations" :key="reg.id" class="glass-card">
             <span :class="'status-'+reg.status">{{ statusLabel(reg.status) }}</span>
-            <b>Race #{{ reg.race_id }}</b>
+            <b>赛事 #{{ reg.race_id }}</b>
             <p>状态：{{ statusLabel(reg.status) }}</p>
             <p>提交时间：{{ reg.submitted_at }}</p>
           </article>
@@ -328,6 +328,30 @@
         <div v-else>
           <section class="dashboard-section">
             <div class="section-head">
+              <h2>任务概览</h2>
+              <span class="status-note">按报名、作品提交和评审任务整理你的待处理事项。</span>
+            </div>
+            <div class="dashboard-grid">
+              <article class="glass-card">
+                <h3>报名记录</h3>
+                <p>{{ myRegistrations.length }} 条报名</p>
+                <button @click="navigate('registrations')">查看报名</button>
+              </article>
+              <article class="glass-card">
+                <h3>可提交作品</h3>
+                <p>{{ myRaceProjects.length }} 个参赛项目</p>
+                <button @click="navigate('home')">继续参赛</button>
+              </article>
+              <article class="glass-card">
+                <h3>评审任务</h3>
+                <p>{{ judgeAssignments.length + judgeInvitations.length }} 项评委相关任务</p>
+                <button v-if="judgeAssignments.length" @click="navigate('judge')">进入评审</button>
+              </article>
+            </div>
+          </section>
+
+          <section class="dashboard-section">
+            <div class="section-head">
               <h2>报名记录</h2>
               <button @click="navigate('registrations')">查看全部</button>
             </div>
@@ -350,7 +374,7 @@
             <div v-if="myRaceProjects.length === 0" class="empty-state">通过报名后，作品提交入口会出现在这里。</div>
             <div v-else class="dashboard-grid">
               <article v-for="rp in myRaceProjects" :key="'rp-'+rp.id" class="glass-card" @click="navigate('race-project', rp.id)">
-                <h3>{{ rp.race?.name || 'Race Project #' + rp.id }}</h3>
+                <h3>{{ rp.race?.name || '参赛项目 #' + rp.id }}</h3>
                 <p>连接健康：{{ rp.connection_health || 'unknown' }}</p>
                 <p>提交状态：{{ statusLabel(rp.aggregate_ingestion_status) }}</p>
                 <button @click.stop="navigate('race-project', rp.id)">提交作品</button>
@@ -416,23 +440,23 @@
 
           <!-- CA 接入列表 -->
           <section>
-            <h2>CA Connections</h2>
-            <button @click="navigate('ca-wizard', currentRaceProjectId)">Setup CA Connection</button>
-            <div v-if="loading.caConnections" class="loading-state">Loading...</div>
-            <div v-else-if="caConnections.length === 0" class="empty-state">No CA connections configured</div>
+            <h2>CA 连接</h2>
+            <button @click="navigate('ca-wizard', currentRaceProjectId)">配置 CA 连接</button>
+            <div v-if="loading.caConnections" class="loading-state">加载中...</div>
+            <div v-else-if="caConnections.length === 0" class="empty-state">暂未配置 CA 连接</div>
             <article v-for="ca in caConnections" :key="ca.id" class="glass-card ca-card">
-              <h3>{{ ca.ca_type || 'CA' }} <span :class="ca.connected ? 'check-pass' : 'check-fail'">{{ ca.connected ? 'Connected' : 'Disconnected' }}</span></h3>
-              <p>Health: {{ ca.health || 'unknown' }}</p>
-              <button @click="deleteCAConnection(ca.id)" class="danger small">Remove</button>
+              <h3>{{ ca.ca_type || 'CA' }} <span :class="ca.connected ? 'check-pass' : 'check-fail'">{{ ca.connected ? '已连接' : '未连接' }}</span></h3>
+              <p>健康状态：{{ ca.health || '未知' }}</p>
+              <button @click="deleteCAConnection(ca.id)" class="danger small">移除</button>
             </article>
           </section>
 
           <!-- Evidence Timeline -->
           <section>
-            <h2>Evidence Timeline</h2>
-            <button @click="loadTimeline">Load Timeline</button>
-            <div v-if="loading.timeline" class="loading-state">Loading...</div>
-            <div v-else-if="timelineEntries.length === 0" class="empty-state">No timeline events yet</div>
+            <h2>证据时间线</h2>
+            <button @click="loadTimeline">加载时间线</button>
+            <div v-if="loading.timeline" class="loading-state">加载中...</div>
+            <div v-else-if="timelineEntries.length === 0" class="empty-state">暂无线索事件</div>
             <ol v-else class="timeline-list">
               <li v-for="(t, i) in timelineEntries" :key="i" class="timeline-item">
                 <span class="tl-time">{{ t.timestamp || t.created_at }}</span>
@@ -466,8 +490,8 @@
 
           <!-- Riding Coach -->
           <section>
-            <h2>Riding Coach</h2>
-            <button @click="loadNextActions">Get Suggestions</button>
+            <h2>骑行助手</h2>
+            <button @click="loadNextActions">获取建议</button>
             <div v-if="nextActions?.actions">
               <div v-for="(a,i) in nextActions.actions" :key="i" class="glass-card">
                 <b>[{{ a.priority }}] {{ a.action }}</b>
@@ -478,8 +502,8 @@
 
           <!-- Review Readiness -->
           <section>
-            <h2>Review Readiness</h2>
-            <button @click="loadReadiness">Check Readiness</button>
+            <h2>评审就绪检查</h2>
+            <button @click="loadReadiness">检查就绪状态</button>
             <div v-if="readiness">
               <div v-for="c in readiness.checks" :key="c.name" class="check-item">
                 <span :class="c.passed ? 'check-pass' : 'check-fail'">{{ c.passed ? '✓' : '✗' }}</span>
@@ -492,24 +516,24 @@
 
       <!-- CA 接入向导 -->
       <section v-else-if="currentPage==='ca-wizard'" class="page page-ca-wizard active">
-        <h1>CA Setup Wizard</h1>
+        <h1>CA 接入向导</h1>
 
         <!-- Loading -->
-        <div v-if="pageState.caWizard==='loading'" class="loading-state">Loading...</div>
+        <div v-if="pageState.caWizard==='loading'" class="loading-state">加载中...</div>
 
         <!-- Unauthorized / Forbidden -->
         <div v-else-if="pageState.caWizard==='unauthorized' || pageState.caWizard==='forbidden'" class="error-state">
-          <h2>{{ pageState.caWizard==='unauthorized' ? 'Please login' : 'Access denied' }}</h2>
+          <h2>{{ pageState.caWizard==='unauthorized' ? '请先登录' : '无权访问' }}</h2>
           <p>{{ errorMessage }}</p>
-          <button v-if="pageState.caWizard==='unauthorized'" @click="navigate('login')">Login</button>
-          <button v-else @click="navigate('race-project', currentRaceProjectId)">Back</button>
+          <button v-if="pageState.caWizard==='unauthorized'" @click="navigate('login')">登录</button>
+          <button v-else @click="navigate('race-project', currentRaceProjectId)">返回</button>
         </div>
 
         <!-- Error -->
         <div v-else-if="pageState.caWizard==='error'" class="error-state">
-          <h2>Failed to load CA Wizard</h2>
+          <h2>CA 向导加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadCAWizard()">Retry</button>
+          <button @click="loadCAWizard()">重试</button>
         </div>
 
         <template v-else>
@@ -519,43 +543,43 @@
           <div class="wizard-body glass-card">
             <!-- Step 1: CA Policy -->
             <div v-if="caWizardStep === 0">
-              <h2>CA Policy</h2>
-              <p>Race CA Policy: <b>{{ caPolicy?.ca_policy || 'rider_choice' }}</b></p>
+              <h2>CA 策略</h2>
+              <p>赛事 CA 策略：<b>{{ caPolicy?.ca_policy || 'rider_choice' }}</b></p>
               <div v-if="caPolicy?.ca_policy === 'organizer_specified'">
-                <p>Allowed CA types:</p>
+                <p>允许的 CA 类型：</p>
                 <ul><li v-for="t in (caPolicy.allowed_types || [])" :key="t">{{ t }}</li></ul>
               </div>
-              <button @click="caWizardStep=1">Next: Configure CA</button>
+              <button @click="caWizardStep=1">下一步：配置 CA</button>
             </div>
             <!-- Step 2: Configure CA -->
             <div v-if="caWizardStep === 1">
-              <h2>Configure CA Connection</h2>
+              <h2>配置 CA 连接</h2>
               <form @submit.prevent="registerCAConnection" class="work-form">
-                <label>CA Type <input v-model="caWizardForm.ca_type" required /></label>
-                <label>API Endpoint <input v-model="caWizardForm.api_endpoint" placeholder="https://..." /></label>
-                <label>API Key <input v-model="caWizardForm.api_key" type="password" /></label>
-                <label>Config (JSON) <textarea v-model="caWizardForm.config" rows="3"></textarea></label>
+                <label>CA 类型 <input v-model="caWizardForm.ca_type" required /></label>
+                <label>API 入口 <input v-model="caWizardForm.api_endpoint" placeholder="https://..." /></label>
+                <label>API 密钥 <input v-model="caWizardForm.api_key" type="password" /></label>
+                <label>配置内容 (JSON) <textarea v-model="caWizardForm.config" rows="3"></textarea></label>
                 <div class="wizard-nav">
-                  <button type="button" @click="caWizardStep=0">Back</button>
-                  <button type="submit">Register &amp; Continue</button>
+                  <button type="button" @click="caWizardStep=0">返回</button>
+                  <button type="submit">注册并继续</button>
                 </div>
               </form>
             </div>
             <!-- Step 3: Handshake -->
             <div v-if="caWizardStep === 2">
-              <h2>Handshake Verification</h2>
-              <div v-if="loading.caHandshake" class="loading-state">Verifying connection...</div>
+              <h2>握手验证</h2>
+              <div v-if="loading.caHandshake" class="loading-state">正在验证连接...</div>
               <template v-else-if="caHandshakeResult">
                 <div :class="caHandshakeResult.success ? 'success-message' : 'error-message'">
-                  <b>{{ caHandshakeResult.success ? 'Connected!' : 'Connection Failed' }}</b>
+                  <b>{{ caHandshakeResult.success ? '连接成功' : '连接失败' }}</b>
                   <p>{{ caHandshakeResult.message }}</p>
-                  <p v-if="!caHandshakeResult.success">Error: {{ caHandshakeResult.error_type }}</p>
+                  <p v-if="!caHandshakeResult.success">错误类型：{{ caHandshakeResult.error_type }}</p>
                 </div>
               </template>
               <div class="wizard-nav">
-                <button @click="caWizardStep=1">Back</button>
-                <button @click="doCAHandshake" :disabled="!caWizardRegisteredId">Verify Handshake</button>
-                <button v-if="caHandshakeResult?.success" @click="navigate('race-project', currentRaceProjectId)">Done - Back to Workspace</button>
+                <button @click="caWizardStep=1">返回</button>
+                <button @click="doCAHandshake" :disabled="!caWizardRegisteredId">验证握手</button>
+                <button v-if="caHandshakeResult?.success" @click="navigate('race-project', currentRaceProjectId)">完成并返回工作区</button>
               </div>
             </div>
           </div>
@@ -598,86 +622,93 @@
 
       <!-- 作品详情 -->
       <section v-else-if="currentPage==='work'" class="page page-work-detail active">
-        <h1>{{ currentWork?.title || 'Work Detail' }}</h1>
+        <h1>{{ currentWork?.title || '作品详情' }}</h1>
 
         <!-- Loading -->
-        <div v-if="pageState.work==='loading'" class="loading-state">Loading...</div>
+        <div v-if="pageState.work==='loading'" class="loading-state">加载中...</div>
 
         <!-- Not Found -->
         <div v-else-if="pageState.work==='not-found'" class="error-state">
-          <h2>Work not found</h2>
+          <h2>作品不存在</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="navigate('works')">Back to Gallery</button>
+          <button @click="navigate('works')">返回作品广场</button>
         </div>
 
         <!-- Error -->
         <div v-else-if="pageState.work==='error'" class="error-state">
-          <h2>Failed to load work</h2>
+          <h2>作品加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="navigate('works')">Back to Gallery</button>
+          <button @click="navigate('works')">返回作品广场</button>
         </div>
 
         <!-- Success -->
         <template v-else-if="currentWork">
           <div class="work-detail glass-card">
-            <p><b>Description:</b> {{ currentWork.description }}</p>
-            <p v-if="currentWork.repo_url"><b>Repo:</b> <a :href="safeUrl(currentWork.repo_url)" target="_blank" rel="noopener noreferrer">{{ currentWork.repo_url }}</a></p>
-            <p v-if="currentWork.demo_url"><b>Demo:</b> <a :href="safeUrl(currentWork.demo_url)" target="_blank" rel="noopener noreferrer">{{ currentWork.demo_url }}</a></p>
-            <p><b>Version:</b> {{ currentWork.version }}</p>
-            <p><b>Status:</b> <span :class="'status-' + currentWork.work_status">{{ currentWork.work_status }}</span></p>
+            <p><b>说明：</b> {{ currentWork.description }}</p>
+            <p v-if="currentWork.repo_url"><b>仓库：</b> <a :href="safeUrl(currentWork.repo_url)" target="_blank" rel="noopener noreferrer">{{ currentWork.repo_url }}</a></p>
+            <p v-if="currentWork.demo_url"><b>演示：</b> <a :href="safeUrl(currentWork.demo_url)" target="_blank" rel="noopener noreferrer">{{ currentWork.demo_url }}</a></p>
+            <p><b>版本：</b> {{ currentWork.version }}</p>
+            <p><b>状态：</b> <span :class="'status-' + currentWork.work_status">{{ statusLabel(currentWork.work_status) }}</span></p>
           </div>
-          <button @click="verifyIntegrity(currentWork.id)">Verify Hash Chain</button>
+          <button @click="verifyIntegrity(currentWork.id)">验证哈希链</button>
           <div v-if="integrityResult" class="glass-card">
-            <p><b>Valid:</b> <span :class="integrityResult.valid ? 'check-pass' : 'check-fail'">{{ integrityResult.valid }}</span></p>
-            <p><b>Chain Length:</b> {{ integrityResult.chain_length }}</p>
+            <p><b>验证结果：</b> <span :class="integrityResult.valid ? 'check-pass' : 'check-fail'">{{ integrityResult.valid ? '通过' : '未通过' }}</span></p>
+            <p><b>链长度：</b> {{ integrityResult.chain_length }}</p>
           </div>
         </template>
       </section>
 
       <!-- 评审页（评委） -->
       <section v-else-if="currentPage==='judge'" class="page page-judge active">
-        <h1>Judge Assignments</h1>
+        <h1>评审清单</h1>
 
         <!-- Unauthorized / Forbidden -->
         <div v-if="pageState.judge==='unauthorized'" class="error-state">
-          <h2>Please login</h2>
-          <p>Judge access requires authentication.</p>
-          <button @click="navigate('login')">Login</button>
+          <h2>请先登录</h2>
+          <p>评审任务需要登录后查看。</p>
+          <button @click="navigate('login')">登录</button>
         </div>
         <div v-else-if="pageState.judge==='forbidden'" class="error-state">
-          <h2>Access denied</h2>
-          <p>You do not have judge permissions.</p>
-          <button @click="navigate('home')">Back to Home</button>
+          <h2>无权访问</h2>
+          <p>当前账号没有评委权限。</p>
+          <button @click="navigate('home')">返回赛事</button>
         </div>
 
         <!-- Loading -->
-        <div v-else-if="pageState.judge==='loading'" class="loading-state">Loading...</div>
+        <div v-else-if="pageState.judge==='loading'" class="loading-state">加载中...</div>
 
         <!-- Error -->
         <div v-else-if="pageState.judge==='error'" class="error-state">
-          <h2>Failed to load assignments</h2>
+          <h2>评审任务加载失败</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadJudgeAssignments()">Retry</button>
+          <button @click="loadJudgeAssignments()">重试</button>
         </div>
 
         <!-- Empty -->
-        <div v-else-if="pageState.judge==='empty'" class="empty-state">No assignments</div>
+        <div v-else-if="pageState.judge==='empty'" class="empty-state">暂无评审任务</div>
 
         <!-- Success -->
+        <section v-else class="dashboard-section">
+          <div class="section-head">
+            <h2>评审任务</h2>
+            <span class="status-note">待评分 {{ judgeAssignments.length }} 项</span>
+          </div>
         <article v-for="a in judgeAssignments" :key="a.work_id" class="glass-card">
-          <h3>{{ a.work?.title || 'Work #'+a.work_id }}</h3>
+          <h3>{{ a.work?.title || '作品 #'+a.work_id }}</h3>
+          <p class="status-note">评分状态：待提交</p>
           <p>{{ a.work?.description?.substring(0, 150) }}</p>
           <form @submit.prevent="submitJudgment(a.work_id)" class="judgment-form">
             <div class="score-row">
-              <label>Technical <input v-model.number="judgmentForms[a.work_id].technical_score" type="number" min="1" max="10" required /></label>
-              <label>Innovation <input v-model.number="judgmentForms[a.work_id].innovation_score" type="number" min="1" max="10" required /></label>
-              <label>Presentation <input v-model.number="judgmentForms[a.work_id].presentation_score" type="number" min="1" max="10" required /></label>
-              <label>Completeness <input v-model.number="judgmentForms[a.work_id].completeness_score" type="number" min="1" max="10" required /></label>
+              <label>技术实现 <input v-model.number="judgmentForms[a.work_id].technical_score" type="number" min="1" max="10" required /></label>
+              <label>创新性 <input v-model.number="judgmentForms[a.work_id].innovation_score" type="number" min="1" max="10" required /></label>
+              <label>展示表达 <input v-model.number="judgmentForms[a.work_id].presentation_score" type="number" min="1" max="10" required /></label>
+              <label>完成度 <input v-model.number="judgmentForms[a.work_id].completeness_score" type="number" min="1" max="10" required /></label>
             </div>
-            <label>Comment <textarea v-model="judgmentForms[a.work_id].comment" rows="2"></textarea></label>
-            <button type="submit">Submit Judgment</button>
+            <label>评语 <textarea v-model="judgmentForms[a.work_id].comment" rows="2"></textarea></label>
+            <button type="submit">提交评分</button>
           </form>
         </article>
+        </section>
       </section>
 
       <!-- 榜单 -->
@@ -759,36 +790,36 @@
 
       <!-- Live Hall 大屏 -->
       <section v-else-if="currentPage==='live'" class="page page-live active fullscreen-page">
-        <div class="page-label"><span>Live Hall</span></div>
-        <h1>Live Hall</h1>
+        <div class="page-label"><span>直播大厅</span></div>
+        <h1>直播大厅</h1>
 
         <!-- No race selected -->
-        <div v-if="!liveRaceId" class="empty-state">Select a race to view live data. <button @click="navigate('home')">Browse Races</button></div>
+        <div v-if="!liveRaceId" class="empty-state">请选择赛事查看直播数据。<button @click="navigate('home')">浏览赛事</button></div>
 
         <!-- Loading -->
-        <div v-else-if="pageState.live==='loading'" class="loading-state">Loading live data...</div>
+        <div v-else-if="pageState.live==='loading'" class="loading-state">直播数据加载中...</div>
 
         <!-- Error -->
         <div v-else-if="pageState.live==='error' || pageState.live==='not-found'" class="error-state">
-          <h2>{{ pageState.live==='not-found' ? 'Race not found' : 'Failed to load live data' }}</h2>
+          <h2>{{ pageState.live==='not-found' ? '赛事不存在' : '直播数据加载失败' }}</h2>
           <p>{{ errorMessage }}</p>
-          <button @click="loadLiveData()">Retry</button>
+          <button @click="loadLiveData()">重试</button>
         </div>
 
         <!-- Success -->
         <div v-else class="live-dashboard">
           <div class="live-header">
-            <h2>{{ liveRaceData?.name || 'Race #'+liveRaceId }}</h2>
-            <span :class="'status-'+liveRaceData?.status">{{ liveRaceData?.status }}</span>
+            <h2>{{ liveRaceData?.name || '赛事 #'+liveRaceId }}</h2>
+            <span :class="'status-'+liveRaceData?.status">{{ statusLabel(liveRaceData?.status) }}</span>
           </div>
           <div class="live-metrics">
-            <article><span>Active CAs</span><b>{{ liveRaceData?.active_ca_count || 0 }}</b></article>
-            <article><span>Entries</span><b>{{ liveEntries?.length || liveRaceData?.entry_count || 0 }}</b></article>
-            <article><span>Avg Progress</span><b>{{ liveRaceData?.avg_progress || 0 }}%</b></article>
-            <article><span>Risk Level</span><b :class="riskClass">{{ liveRaceData?.risk_distribution?.high || 0 }} High</b></article>
+            <article><span>活跃 CA</span><b>{{ liveRaceData?.active_ca_count || 0 }}</b></article>
+            <article><span>参赛条目</span><b>{{ liveEntries?.length || liveRaceData?.entry_count || 0 }}</b></article>
+            <article><span>平均进度</span><b>{{ liveRaceData?.avg_progress || 0 }}%</b></article>
+            <article><span>风险等级</span><b :class="riskClass">{{ liveRaceData?.risk_distribution?.high || 0 }} 高风险</b></article>
           </div>
           <div class="live-ca-distribution" v-if="liveRaceData?.ca_distribution">
-            <h3>CA Distribution</h3>
+            <h3>CA 分布</h3>
             <div class="ca-bars">
               <div v-for="(count, type) in liveRaceData.ca_distribution" :key="type" class="ca-bar-item">
                 <span class="ca-bar-label">{{ type }}</span>
@@ -798,20 +829,20 @@
             </div>
           </div>
           <div class="live-entries" v-if="liveEntries.length > 0">
-            <h3>Rider Progress</h3>
+            <h3>骑手进度</h3>
             <div class="entries-grid">
               <article v-for="e in liveEntries" :key="e.rider_id || e.user_id" class="glass-card live-entry-card">
                 <div class="entry-rank" v-if="e.position">#{{ e.position }}</div>
-                <h4>{{ e.rider_name || e.display_name || 'Rider #'+e.rider_id }}</h4>
+                <h4>{{ e.rider_name || e.display_name || '骑手 #'+e.rider_id }}</h4>
                 <div class="progress-bar"><div class="progress-fill" :style="{width: (e.progress || 0)+'%'}"></div></div>
                 <div class="entry-meta">
-                  <span>Progress: {{ e.progress || 0 }}%</span>
+                  <span>进度：{{ e.progress || 0 }}%</span>
                   <span :class="e.risk_level==='high'?'check-fail':'check-pass'">{{ e.risk_level || 'low' }}</span>
                 </div>
               </article>
             </div>
           </div>
-          <div v-if="liveEntries.length === 0 && pageState.live==='success'" class="empty-state">No rider data available yet</div>
+          <div v-if="liveEntries.length === 0 && pageState.live==='success'" class="empty-state">暂无骑手数据</div>
         </div>
       </section>
 
@@ -848,6 +879,26 @@
             <button :class="{active: adminTab==='create'}" @click="adminTab='create'">创建赛事</button>
             <button :class="{active: adminTab==='awards'}" @click="adminTab='awards'">奖项</button>
           </div>
+          <section class="dashboard-section">
+            <div class="section-head">
+              <h2>组织者任务面板</h2>
+              <span class="status-note">聚合待审核报名、可推进状态和导出数据。</span>
+            </div>
+            <div class="dashboard-grid">
+              <article class="glass-card">
+                <h3>待审核</h3>
+                <p>进入赛事卡片查看报名申请。</p>
+              </article>
+              <article class="glass-card">
+                <h3>可推进</h3>
+                <p>根据“下一步”提示推进赛事状态。</p>
+              </article>
+              <article class="glass-card">
+                <h3>数据导出</h3>
+                <p>报名、评审和作品数据支持 CSV 导出。</p>
+              </article>
+            </div>
+          </section>
           <!-- My Races -->
           <div v-if="adminTab==='races'">
             <div v-if="adminRaces.length === 0" class="empty-state">还没有组织赛事。<button @click="adminTab='create'">创建赛事</button></div>
@@ -917,7 +968,7 @@
               <div v-for="a in awards" :key="a.id" class="glass-card">
                 <b>#{{ a.position }} {{ a.title }}</b>
                 <p>{{ a.description }}</p>
-                <button @click="deleteAward(a.id)" class="danger">Delete</button>
+                <button @click="deleteAward(a.id)" class="danger">删除</button>
               </div>
             </div>
           </div>
@@ -927,18 +978,18 @@
       <!-- 通用错误页 -->
       <section v-else-if="currentPage==='error'" class="page page-error active">
         <div class="error-state" style="padding:80px 20px">
-          <h1>{{ errorTitle || 'Error' }}</h1>
-          <p>{{ errorMessage || 'Something went wrong' }}</p>
+          <h1>{{ errorTitle || '出错了' }}</h1>
+          <p>{{ errorMessage || '操作未能完成，请稍后重试。' }}</p>
           <div style="display:flex;gap:12px;justify-content:center;margin-top:24px">
-            <button @click="navigate('home')">Back to Home</button>
-            <button @click="window.history.back()">Go Back</button>
+            <button @click="navigate('home')">返回赛事</button>
+            <button @click="window.history.back()">返回上一页</button>
           </div>
         </div>
       </section>
 
       <!-- 全局离线遮罩 -->
       <div v-if="isOffline && currentPage!=='home'" class="offline-toast">
-        &#9888; You are offline — data may be stale
+        &#9888; 当前离线，数据可能不是最新
       </div>
     </main>
   </div>

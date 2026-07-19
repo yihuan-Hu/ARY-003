@@ -4,7 +4,7 @@
 
 // DEBUG: 全局错误捕获，显示在页面上方便定位问题
 window.onerror = function(msg, url, line, col, err) {
-  document.body.innerHTML = '<div style="padding:40px;font-family:monospace;color:red;background:#fff;max-width:900px;margin:40px auto;border:2px solid red;border-radius:8px;word-break:break-all"><h2>JS Error</h2><p><b>Message:</b> ' + msg + '</p><p><b>File:</b> ' + url + '</p><p><b>Line:</b> ' + line + ':' + col + '</p><p><b>Stack:</b><pre>' + (err ? err.stack : 'N/A') + '</pre></p><button onclick="location.reload()" style="padding:10px 20px;font-size:16px;cursor:pointer">Reload</button></div>';
+  document.body.innerHTML = '<div style="padding:40px;font-family:monospace;color:red;background:#fff;max-width:900px;margin:40px auto;border:2px solid red;border-radius:8px;word-break:break-all"><h2>页面脚本错误</h2><p><b>消息：</b> ' + msg + '</p><p><b>文件：</b> ' + url + '</p><p><b>行号：</b> ' + line + ':' + col + '</p><p><b>堆栈：</b><pre>' + (err ? err.stack : '无') + '</pre></p><button onclick="location.reload()" style="padding:10px 20px;font-size:16px;cursor:pointer">重新加载</button></div>';
   return true;
 };
 
@@ -180,7 +180,7 @@ const app = createApp({
     const liveEntries = ref([]);
 
     // CA Wizard
-    const caWizardSteps = ['Policy', 'Configure', 'Handshake'];
+    const caWizardSteps = ['策略', '配置', '握手'];
     const caWizardStep = ref(0);
     const caPolicy = ref(null);
     const caWizardForm = reactive({ ca_type: '', api_endpoint: '', api_key: '', config: '' });
@@ -236,7 +236,7 @@ const app = createApp({
         pageState[page] = 'error';
       }
       // 保存错误详情到全局
-      errorTitle.value = err.message || 'Error';
+      errorTitle.value = err.message || '出错了';
       errorMessage.value = err.data?.detail || err.data?.message || `HTTP ${status}`;
     }
 
@@ -351,7 +351,7 @@ const app = createApp({
           navigate('home');
         }
       } catch (e) {
-        loginError.value = e.message || 'Login failed';
+        loginError.value = e.message || '登录失败';
       } finally {
         loading.login = false;
       }
@@ -377,11 +377,11 @@ const app = createApp({
           token.value = t;
           isLoggedIn.value = true;
           currentUser.value = res.user || res.data?.user;
-          registerAuthSuccess.value = 'Registration successful! Redirecting...';
+          registerAuthSuccess.value = '注册成功，正在跳转...';
           setTimeout(() => navigate('home'), 1000);
         }
       } catch (e) {
-        registerAuthError.value = e.message || 'Registration failed';
+        registerAuthError.value = e.message || '注册失败';
       } finally {
         loading.registerAuth = false;
       }
@@ -566,7 +566,7 @@ const app = createApp({
         });
         loadProfile();
       } catch (e) {
-        alert('Update failed: ' + e.message);
+        alert('保存失败：' + e.message);
       }
     }
 
@@ -588,7 +588,7 @@ const app = createApp({
         registerSuccess.value = true;
         pageState.register = 'success';
       } catch (e) {
-        registerError.value = e.message || 'Registration failed';
+        registerError.value = e.message || '报名失败';
         handlePageError('register', e);
       } finally {
         loading.register = false;
@@ -727,36 +727,36 @@ const app = createApp({
         showCreateWork.value = false;
         Object.assign(workForm, { title: '', description: '', repo_url: '', demo_url: '' });
         loadRaceProject();
-      } catch (e) { alert('Create work failed: ' + e.message); }
+      } catch (e) { alert('创建作品失败：' + e.message); }
     }
 
     async function submitWork(workId) {
       try {
         await api(`/api/v1/rider/works/${workId}/submit`, { method: 'POST' });
         loadRaceProject();
-      } catch (e) { alert('Submit failed: ' + e.message); }
+      } catch (e) { alert('提交失败：' + e.message); }
     }
 
     async function deleteWork(workId) {
-      if (!confirm('Delete this work?')) return;
+      if (!confirm('确认删除这个作品草稿吗？')) return;
       try {
         await api(`/api/v1/rider/works/${workId}`, { method: 'DELETE' });
         loadRaceProject();
-      } catch (e) { alert('Delete failed: ' + e.message); }
+      } catch (e) { alert('删除失败：' + e.message); }
     }
 
     async function loadNextActions() {
       try {
         const res = await api(`/api/v1/rider/race-projects/${currentRaceProjectId.value}/next-actions`);
         nextActions.value = res.data || res;
-      } catch (e) { alert('Failed: ' + e.message); }
+      } catch (e) { alert('加载建议失败：' + e.message); }
     }
 
     async function loadReadiness() {
       try {
         const res = await api(`/api/v1/rider/race-projects/${currentRaceProjectId.value}/review-readiness`);
         readiness.value = res.data || res;
-      } catch (e) { alert('Failed: ' + e.message); }
+      } catch (e) { alert('检查失败：' + e.message); }
     }
 
     // ---- API: Judge ----
@@ -788,9 +788,9 @@ const app = createApp({
         await api(`/api/v1/judge/works/${workId}/judgments`, {
           method: 'POST', body: JSON.stringify(body)
         });
-        alert('Judgment submitted!');
+        alert('评分已提交');
         loadJudgeAssignments();
-      } catch (e) { alert('Submit judgment failed: ' + e.message); }
+      } catch (e) { alert('提交评分失败：' + e.message); }
     }
 
     // ---- API: CA Wizard ----
@@ -833,7 +833,7 @@ const app = createApp({
         const data = res.data || res;
         caWizardRegisteredId.value = data.id;
         caWizardStep.value = 2;
-      } catch (e) { alert('Register CA failed: ' + e.message); }
+      } catch (e) { alert('注册 CA 失败：' + e.message); }
     }
 
     async function doCAHandshake() {
@@ -857,11 +857,11 @@ const app = createApp({
     }
 
     async function deleteCAConnection(caId) {
-      if (!confirm('Remove this CA connection?')) return;
+      if (!confirm('确认移除这个 CA 连接吗？')) return;
       try {
         await api(`/api/v1/rider/ca-connections/${caId}`, { method: 'DELETE' });
         loadCAConnections();
-      } catch (e) { alert('Failed: ' + e.message); }
+      } catch (e) { alert('移除失败：' + e.message); }
     }
 
     // ---- API: Timeline ----
@@ -941,7 +941,7 @@ const app = createApp({
       try {
         await api(`/api/v1/organizer/races/${raceId}/${action}`, { method: 'POST' });
         loadAdminRaces();
-      } catch (e) { alert(`Transition failed: ${e.message}`); }
+      } catch (e) { alert(`状态推进失败：${e.message}`); }
     }
 
     async function loadAdminRegistrations(raceId) {
@@ -954,15 +954,15 @@ const app = createApp({
     async function approveReg(regId) {
       try {
         await api(`/api/v1/organizer/registrations/${regId}/approve`, { method: 'POST' });
-        alert('Approved!');
-      } catch (e) { alert('Failed: ' + e.message); }
+        alert('已通过');
+      } catch (e) { alert('操作失败：' + e.message); }
     }
 
     async function rejectReg(regId) {
       try {
         await api(`/api/v1/organizer/registrations/${regId}/reject`, { method: 'POST' });
-        alert('Rejected!');
-      } catch (e) { alert('Failed: ' + e.message); }
+        alert('已拒绝');
+      } catch (e) { alert('操作失败：' + e.message); }
     }
 
     async function createRace() {
@@ -970,12 +970,12 @@ const app = createApp({
         await api('/api/v1/organizer/races', {
           method: 'POST', body: JSON.stringify({ ...createRaceForm })
         });
-        alert('Race created!');
+        alert('赛事已创建');
         adminTab.value = 'races';
         loadAdminRaces();
       } catch (e) {
-        const msg = e.message || 'Unknown error';
-        alert('Create race failed: ' + msg);
+        const msg = e.message || '未知错误';
+        alert('创建赛事失败：' + msg);
         if (e.status === 401 || e.status === 403) {
           localStorage.removeItem('ary_token');
           token.value = '';
@@ -996,7 +996,7 @@ const app = createApp({
         const a = document.createElement('a');
         a.href = url; a.download = `race_${raceId}_${type}.csv`;
         a.click(); URL.revokeObjectURL(url);
-      } catch (e) { alert('Export failed: ' + e.message); }
+      } catch (e) { alert('导出失败：' + e.message); }
     }
 
     async function loadAwards() {
@@ -1013,14 +1013,14 @@ const app = createApp({
           method: 'POST', body: JSON.stringify({ ...awardForm })
         });
         loadAwards();
-      } catch (e) { alert('Create award failed: ' + e.message); }
+      } catch (e) { alert('创建奖项失败：' + e.message); }
     }
 
     async function deleteAward(awardId) {
       try {
         await api(`/api/v1/organizer/awards/${awardId}`, { method: 'DELETE' });
         loadAwards();
-      } catch (e) { alert('Delete award failed: ' + e.message); }
+      } catch (e) { alert('删除奖项失败：' + e.message); }
     }
 
     // ---- XSS 安全渲染 ----
